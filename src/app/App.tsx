@@ -1,0 +1,698 @@
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
+import { AlertTriangle } from "lucide-react";
+
+import type {
+  BedStatus,
+  Page,
+  DischargeType,
+  Bed,
+  Patient,
+  AppConfig,
+} from "./types";
+import { DISCHARGE_TTL } from "./constants";
+import { ls } from "./lib/storage";
+import { backupState } from "./lib/dbBackup";
+import { uid } from "./lib/id";
+import { KbContext } from "./lib/kbContext";
+import {
+  getOrCreateDeviceId,
+  loadStoredConfig,
+  isConfigValid,
+  buildSyncPayload,
+  sendSyncPayload,
+  makeBeds,
+  syncBeds,
+  setDeviceId,
+} from "./lib/sync";
+import {
+  buildMediboardSyncPayload,
+  syncMediboardWard,
+} from "./lib/mediboard";
+import { DashboardNavIcon } from "./components/icons/DashboardNavIcon";
+import { BedMapsNavIcon } from "./components/icons/BedMapsNavIcon";
+import { VirtualKeyboard } from "./components/VirtualKeyboard";
+import { TopBar } from "./components/TopBar";
+import { PinModal } from "./components/PinModal";
+import { SplashScreen } from "./components/SplashScreen";
+import { NeedsSetupScreen } from "./components/NeedsSetupScreen";
+import { OnboardingScreen } from "./components/OnboardingScreen";
+import { DashboardPage } from "./pages/DashboardPage";
+import { BedMapsPage } from "./pages/BedMapsPage";
+import { AdmissionsPage } from "./pages/AdmissionsPage";
+import { ReportsPage } from "./pages/ReportsPage";
+import { AdmissionsHistoryPage } from "./pages/AdmissionsHistoryPage";
+import { SettingsPage } from "./pages/SettingsPage";
+
+// ─── ERROR BOUNDARY ───────────────────────────────────────────────────────────
+
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch() {
+    setTimeout(() => window.location.reload(), 5000);
+  }
+  render() {
+    if (this.state.hasError)
+      return (
+        <div className="flex flex-col items-center justify-center h-screen bg-white p-8 text-center">
+          <AlertTriangle
+            size={48}
+            className="text-[#dd2237] mb-4"
+          />
+          <p className="text-lg font-bold text-[#0f172a] mb-2">
+            Application Error
+          </p>
+          <p className="text-sm text-[#64748b] mb-4">
+            Reloading in 5 seconds...
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2.5 rounded-[10px] text-white font-semibold"
+            style={{ backgroundColor: "#dd2237" }}
+          >
+            Reload Now
+          </button>
+        </div>
+      );
+    return this.props.children;
+  }
+}
+
+// ─── APP ──────────────────────────────────────────────────────────────────────
+
+export default function App() {
+  const [appState, setAppState] = useState<
+    "splash" | "onboarding" | "needsSetup" | "ready"
+  >("splash");
+  const [page, setPage] = useState<Page>("dashboard");
+  const [config, setConfig] = useState<AppConfig>(
+    loadStoredConfig,
+  );
+  const [beds, setBeds] = useState<Bed[]>(() =>
+    syncBeds(
+      ls.get<Bed[]>("bl_beds", []),
+      loadStoredConfig().wards,
+    ),
+  );
+  const [patients, setPatients] = useState<Patient[]>(() =>
+    ls.get("bl_patients", []),
+  );
+  const [online, setOnline] = useState(navigator.onLine);
+  const [kbOpen, setKbOpen] = useState(false);
+  const [kbNumeric, setKbNumeric] = useState(false);
+  const activeElRef = useRef<HTMLInputElement | null>(null);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<
+    "idle" | "sending" | "success" | "error"
+  >("idle");
+  const [lastSync, setLastSync] = useState<{
+    at: number;
+    error?: string;
+  } | null>(() =>
+    ls.get<{ at: number; error?: string } | null>(
+      "bl_last_sync",
+      null,
+    ),
+  );
+  // Distinct from `lastSync` (every attempt, success or fail) — this is
+  // only ever updated when a sync actually succeeds, so the periodic
+  // catch-up check below can tell whether a real-time attempt was missed
+  // or failed, rather than just how long it's been since anything was
+  // last tried.
+  const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState<
+    number | null
+  >(() => ls.get<number | null>("bl_last_successful_sync", null));
+
+  // Whether this device counts as onboarded — checked against real config
+  // content (a real `hospitalId` + at least one real ward), not just "was
+  // something ever saved." See `isConfigValid` in lib/sync.ts for why this
+  // matters: it's what keeps an interrupted/corrupted onboarding from ever
+  // being mistaken for a completed one.
+  const needsSetup = !isConfigValid(config);
+
+  // Persist
+  useEffect(() => {
+    ls.set("bl_config", config);
+  }, [config]);
+  useEffect(() => {
+    ls.set("bl_beds", beds);
+  }, [beds]);
+  useEffect(() => {
+    ls.set("bl_patients", patients);
+  }, [patients]);
+
+  // Durable local backup — mirrors state into Postgres via db-backend/ on
+  // every change, alongside (never instead of) the localStorage persist
+  // above. Fire-and-forget; never affects app behavior if it fails.
+  useEffect(() => {
+    backupState(config, beds, patients);
+  }, [config, beds, patients]);
+
+  // Online status
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+
+  // Auto-cleanup discharged patients after 30 min
+  useEffect(() => {
+    const t = setInterval(() => {
+      const now = Date.now();
+      setPatients((prev) => {
+        const next = prev.filter(
+          (p) =>
+            !(
+              p.status === "discharged" &&
+              p.dischargedAt &&
+              now - p.dischargedAt >= DISCHARGE_TTL
+            ),
+        );
+        return next.length !== prev.length ? next : prev;
+      });
+    }, 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Kiosk: disable right-click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => e.preventDefault();
+    document.addEventListener("contextmenu", handler);
+    return () =>
+      document.removeEventListener("contextmenu", handler);
+  }, []);
+
+  // Keyboard
+  const openFor = useCallback(
+    (el: HTMLInputElement, numeric?: boolean) => {
+      activeElRef.current = el;
+      setKbOpen(true);
+      setKbNumeric(!!numeric);
+      setTimeout(
+        () =>
+          el.scrollIntoView({
+            behavior: "smooth",
+            block: "nearest",
+          }),
+        150,
+      );
+    },
+    [],
+  );
+  const dismiss = useCallback(() => {
+    setKbOpen(false);
+    activeElRef.current = null;
+  }, []);
+
+  // Actions
+  const handleAdmit = useCallback(
+    (hospitalNumber: string, bedId: string) => {
+      setBeds((prev) => {
+        const bed = prev.find((b) => b.id === bedId);
+        if (!bed || bed.status !== "available") return prev;
+        const pid = uid();
+        setPatients((ps) => [
+          ...ps,
+          {
+            id: pid,
+            hospitalNumber,
+            admittedAt: Date.now(),
+            bedId,
+            wardId: bed.wardId,
+            status: "admitted",
+          },
+        ]);
+        return prev.map((b) =>
+          b.id === bedId
+            ? {
+                ...b,
+                status: "occupied",
+                patientId: pid,
+                updatedAt: Date.now(),
+              }
+            : b,
+        );
+      });
+    },
+    [],
+  );
+
+  const handleDischarge = useCallback(
+    (pid: string, bid: string, type: DischargeType) => {
+      const now = Date.now();
+      setPatients((prev) =>
+        prev.map((p) =>
+          p.id === pid
+            ? {
+                ...p,
+                status: "discharged",
+                dischargeType: type,
+                dischargedAt: now,
+              }
+            : p,
+        ),
+      );
+      setBeds((prev) =>
+        prev.map((b) =>
+          b.id === bid
+            ? {
+                ...b,
+                status: "available",
+                patientId: undefined,
+                updatedAt: now,
+              }
+            : b,
+        ),
+      );
+    },
+    [],
+  );
+
+  const handleStatusChange = useCallback(
+    (bid: string, status: BedStatus) => {
+      setBeds((prev) =>
+        prev.map((b) =>
+          b.id === bid
+            ? { ...b, status, updatedAt: Date.now() }
+            : b,
+        ),
+      );
+    },
+    [],
+  );
+
+  const handleTransfer = useCallback(
+    (patientId: string, fromBedId: string, toBedId: string) => {
+      const now = Date.now();
+      setBeds((prev) => {
+        const toBed = prev.find((b) => b.id === toBedId);
+        if (!toBed) return prev;
+        setPatients((ps) =>
+          ps.map((p) =>
+            p.id === patientId
+              ? { ...p, bedId: toBedId, wardId: toBed.wardId }
+              : p,
+          ),
+        );
+        return prev.map((b) => {
+          if (b.id === fromBedId)
+            return {
+              ...b,
+              status: "available" as BedStatus,
+              patientId: undefined,
+              updatedAt: now,
+            };
+          if (b.id === toBedId)
+            return {
+              ...b,
+              status: "occupied" as BedStatus,
+              patientId,
+              updatedAt: now,
+            };
+          return b;
+        });
+      });
+    },
+    [],
+  );
+
+  const handleSaveConfig = useCallback((c: AppConfig) => {
+    setConfig(c);
+    setBeds((prev) => syncBeds(prev, c.wards));
+  }, []);
+
+  // Manual + automatic data sync. A Mediboard-linked device (has
+  // hospitalId + a Mediboard-issued ward id) syncs straight to Mediboard's
+  // own endpoint automatically — no URL to configure, since we already
+  // know exactly where that is. A device not linked to Mediboard falls
+  // back to the original generic behavior: POST to whatever URL the admin
+  // configured in Settings > Data Sync.
+  const triggerSync = useCallback(
+    async (cfgOverride?: AppConfig) => {
+      const cfg = cfgOverride ?? config;
+      const ward = cfg.wards[0];
+      setSyncStatus("sending");
+      let error: string | undefined;
+      try {
+        if (cfg.hospitalId && ward?.id) {
+          const payload = buildMediboardSyncPayload(
+            cfg,
+            beds,
+            patients,
+          );
+          await syncMediboardWard(cfg.hospitalId, ward.id, payload);
+        } else if (cfg.syncEndpoint) {
+          const payload = buildSyncPayload(cfg, beds, patients);
+          const result = await sendSyncPayload(
+            cfg.syncEndpoint,
+            payload,
+          );
+          if (!result.ok) error = result.error ?? "Sync failed";
+        } else {
+          error = "No endpoint set";
+        }
+      } catch (e) {
+        error = e instanceof Error ? e.message : "Sync failed";
+      }
+      const record = { at: Date.now(), error };
+      ls.set("bl_last_sync", record);
+      setLastSync(record);
+      if (!error) {
+        ls.set("bl_last_successful_sync", record.at);
+        setLastSuccessfulSyncAt(record.at);
+      }
+      setSyncStatus(error ? "error" : "success");
+      setTimeout(() => setSyncStatus("idle"), 3000);
+    },
+    [config, beds, patients],
+  );
+
+  // Periodic catch-up sync: not tied to any specific time of day. Checks
+  // every minute whether the most recent local bed/patient change is newer
+  // than the last successful sync — if so, something didn't make it across
+  // (the real-time sync below only fires while online, so this is what
+  // catches up a device that was offline, or where a real-time attempt
+  // failed) — and retries while online. A Mediboard-linked device doesn't
+  // need syncEndpoint set — it always has somewhere to sync to.
+  useEffect(() => {
+    if (
+      !config.syncEnabled ||
+      !(config.hospitalId || config.syncEndpoint)
+    )
+      return;
+    const check = () => {
+      if (!online) return;
+      const lastLocalChange = Math.max(
+        0,
+        ...beds.map((b) => b.updatedAt),
+        ...patients.flatMap((p) => [
+          p.admittedAt,
+          p.dischargedAt ?? 0,
+        ]),
+      );
+      if (lastLocalChange > (lastSuccessfulSyncAt ?? 0)) {
+        triggerSync();
+      }
+    };
+    check();
+    const t = setInterval(check, 60_000);
+    return () => clearInterval(t);
+  }, [
+    config.syncEnabled,
+    config.syncEndpoint,
+    config.hospitalId,
+    online,
+    beds,
+    patients,
+    lastSuccessfulSyncAt,
+    triggerSync,
+  ]);
+
+  // Real-time sync: fire automatically the moment a bed's status changes
+  // (admit/discharge/transfer/status update) — not just from the manual
+  // "Send Now" button or the periodic catch-up above. Only while online and
+  // once the device is actually in normal use (skips the very first run,
+  // which is just initial load rather than a real change; skips onboarding
+  // entirely). Silently does nothing if there's nowhere to sync to yet.
+  const isFirstBedsSync = useRef(true);
+  useEffect(() => {
+    if (isFirstBedsSync.current) {
+      isFirstBedsSync.current = false;
+      return;
+    }
+    if (appState !== "ready" || !online) return;
+    if (!config.hospitalId && !config.syncEndpoint) return;
+    triggerSync();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [beds, patients]);
+
+  const handleOnboardingComplete = useCallback(
+    (
+      c: Omit<AppConfig, "deviceId" | "deviceLabel">,
+      seed?: { beds: Bed[]; patients: Patient[] },
+      deviceOverride?: { deviceId: string; deviceLabel: string },
+    ) => {
+      // `deviceOverride` carries a real, Mediboard-issued deviceId back
+      // from onboarding's `/setup` call — that has to become this
+      // install's permanent deviceId (not just this session's), since
+      // `/sync` only works for a deviceId Mediboard actually recognizes.
+      if (deviceOverride) setDeviceId(deviceOverride.deviceId);
+      const fullConfig: AppConfig = {
+        ...config,
+        ...c,
+        deviceId: deviceOverride?.deviceId ?? getOrCreateDeviceId(),
+        deviceLabel: deviceOverride?.deviceLabel,
+      };
+      // `seed` is real bed/patient data fetched from Mediboard for an
+      // existing ward, handed over by onboarding — inherit it instead of
+      // resetting everyone to "available" when it's available and valid.
+      const initialBeds = seed?.beds ?? makeBeds(fullConfig.wards);
+      const initialPatients = seed?.patients ?? [];
+      ls.set("bl_config", fullConfig);
+      ls.set("bl_beds", initialBeds);
+      ls.set("bl_patients", initialPatients);
+      setConfig(fullConfig);
+      setBeds(initialBeds);
+      setPatients(initialPatients);
+      setAppState("ready");
+    },
+    [],
+  );
+
+  return (
+    <ErrorBoundary>
+      <KbContext.Provider
+        value={{
+          isOpen: kbOpen,
+          activeEl: activeElRef,
+          numeric: kbNumeric,
+          openFor,
+          dismiss,
+        }}
+      >
+        <div
+          className="app-shell flex flex-col bg-white overflow-hidden"
+          style={{
+            userSelect: "none",
+            WebkitUserSelect: "none",
+            fontFamily: "Inter, system-ui, sans-serif",
+          }}
+          onPointerDown={(e) => {
+            if (
+              kbOpen &&
+              !(e.target as HTMLElement).closest(
+                "input, select",
+              )
+            )
+              dismiss();
+          }}
+        >
+          {/* Splash screen */}
+          {appState === "splash" && (
+            <SplashScreen
+              onDone={() =>
+                setAppState(
+                  needsSetup ? "needsSetup" : "ready",
+                )
+              }
+            />
+          )}
+
+          {/* Not onboarded (or an onboarding attempt was interrupted) —
+              the only thing this device can show until setup genuinely
+              completes; no fallback dashboard to slip into by mistake. */}
+          {appState === "needsSetup" && (
+            <NeedsSetupScreen
+              onStart={() => setAppState("onboarding")}
+            />
+          )}
+
+          {/* Onboarding */}
+          {appState === "onboarding" && (
+            <>
+              <OnboardingScreen
+                onComplete={handleOnboardingComplete}
+              />
+              <VirtualKeyboard />
+            </>
+          )}
+
+          {appState === "ready" && (
+            <>
+              <TopBar
+                onSettingsPress={() => setShowPinModal(true)}
+              />
+
+              <main
+                className={`flex-1 min-h-0 ${page === "dashboard" ? "overflow-y-auto" : "overflow-hidden"}`}
+                style={{
+                  paddingBottom: kbOpen ? 340 : 0,
+                  transition: "padding-bottom 0.2s ease",
+                }}
+              >
+                {page === "dashboard" && (
+                  <DashboardPage
+                    beds={beds}
+                    patients={patients}
+                    wards={config.wards}
+                    onAdmit={handleAdmit}
+                    onDischarge={handleDischarge}
+                    onNavigate={setPage}
+                  />
+                )}
+                {page === "bedmaps" && (
+                  <BedMapsPage
+                    beds={beds}
+                    patients={patients}
+                    wards={config.wards}
+                    onAdmit={handleAdmit}
+                    onDischarge={handleDischarge}
+                    onStatusChange={handleStatusChange}
+                    onTransfer={handleTransfer}
+                  />
+                )}
+                {page === "admissions" && (
+                  <AdmissionsPage
+                    beds={beds}
+                    patients={patients}
+                    wards={config.wards}
+                    onDischarge={handleDischarge}
+                  />
+                )}
+                {page === "reports" && (
+                  <ReportsPage
+                    beds={beds}
+                    patients={patients}
+                    onBack={() => setPage("dashboard")}
+                    onAdmissionsHistory={() =>
+                      setPage("admissions-history")
+                    }
+                  />
+                )}
+                {page === "admissions-history" && (
+                  <AdmissionsHistoryPage
+                    patients={patients}
+                    beds={beds}
+                    wards={config.wards}
+                    onBack={() => setPage("reports")}
+                  />
+                )}
+                {page === "settings" && (
+                  <SettingsPage
+                    config={config}
+                    onSave={handleSaveConfig}
+                    beds={beds}
+                    onBack={() => setPage("dashboard")}
+                    onSyncNow={triggerSync}
+                    syncStatus={syncStatus}
+                    lastSync={lastSync}
+                  />
+                )}
+              </main>
+
+              {/* Bottom Navigation — Frame6: bg-[#fbf9f9], gap-[4px], px-[20px] py-[10px], exactly 2 buttons */}
+              <nav className="flex-shrink-0 bg-[#fbf9f9] flex gap-[4px] items-center px-[20px] py-[10px] border-t border-black/10">
+                {/* Dashboard — ButtonMargin: flex-[1_0_0], h-[64px], bg-[#3469b2] when active */}
+                <div className="flex-[1_0_0] flex flex-col items-center justify-center h-[64px]">
+                  <button
+                    onClick={() => setPage("dashboard")}
+                    className="w-full h-full rounded-[10px] flex flex-row items-center justify-center gap-[24px] transition-colors active:opacity-90"
+                    style={{
+                      backgroundColor:
+                        page === "dashboard"
+                          ? "#3469b2"
+                          : "rgba(52,105,178,0.05)",
+                    }}
+                  >
+                    <DashboardNavIcon
+                      color={
+                        page === "dashboard"
+                          ? "white"
+                          : "#64748B"
+                      }
+                    />
+                    <span
+                      className="font-semibold leading-[20px] text-[20px] whitespace-nowrap"
+                      style={{
+                        color:
+                          page === "dashboard"
+                            ? "white"
+                            : "#64748b",
+                      }}
+                    >
+                      Dashboard
+                    </span>
+                  </button>
+                </div>
+
+                {/* Bed Maps — ButtonMargin1: flex-[1_0_0], h-[60px], bg-[rgba(52,105,178,0.05)] when inactive */}
+                <div className="flex-[1_0_0] flex flex-col items-center justify-center h-[60px]">
+                  <button
+                    onClick={() => setPage("bedmaps")}
+                    className="w-full h-full rounded-[10px] flex flex-row items-center justify-center gap-[24px] transition-colors active:opacity-90"
+                    style={{
+                      backgroundColor:
+                        page === "bedmaps"
+                          ? "#3469b2"
+                          : "rgba(52,105,178,0.05)",
+                    }}
+                  >
+                    <BedMapsNavIcon
+                      color={
+                        page === "bedmaps" ? "white" : "#64748B"
+                      }
+                    />
+                    <span
+                      className="font-semibold leading-[20px] text-[20px] whitespace-nowrap"
+                      style={{
+                        color:
+                          page === "bedmaps"
+                            ? "white"
+                            : "#64748b",
+                      }}
+                    >
+                      Bed Maps
+                    </span>
+                  </button>
+                </div>
+              </nav>
+
+              {/* Virtual Keyboard */}
+              <VirtualKeyboard />
+
+              {/* Settings PIN Modal */}
+              {showPinModal && (
+                <PinModal
+                  config={config}
+                  onSuccess={() => {
+                    setShowPinModal(false);
+                    setPage("settings");
+                  }}
+                  onCancel={() => setShowPinModal(false)}
+                />
+              )}
+            </>
+          )}
+        </div>
+      </KbContext.Provider>
+    </ErrorBoundary>
+  );
+}
