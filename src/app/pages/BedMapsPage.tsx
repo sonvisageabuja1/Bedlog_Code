@@ -21,7 +21,10 @@ export function BedMapsPage({
   beds: Bed[];
   patients: Patient[];
   wards: Ward[];
-  onAdmit: (hn: string, bedId: string) => void;
+  onAdmit: (
+    hn: string,
+    bedId: string,
+  ) => { ok: boolean; error?: string };
   onDischarge: (
     pid: string,
     bid: string,
@@ -577,7 +580,11 @@ export function BedMapsPage({
                       );
                       return;
                     }
-                    onAdmit(admitHn.trim(), selectedBed.id);
+                    const result = onAdmit(admitHn.trim(), selectedBed.id);
+                    if (!result.ok) {
+                      showToast(result.error ?? "Could not admit", "error");
+                      return;
+                    }
                     showToast(
                       `HN ${admitHn} admitted to ${bedDisplayNumber(beds, selectedBed.id)}`,
                       "success",

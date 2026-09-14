@@ -211,7 +211,12 @@ export interface MediboardPatientSnapshot {
 //   - local occupied, but the server shows THIS stay closed (a discharge /
 //     LAMA / deceased / absconded event for the same patient, bed and
 //     admission time — i.e. done from app-client) → discharge locally with
-//     that outcome and free the bed.
+//     that outcome and free the bed;
+//   - local occupied, but the server has the SAME patient occupying a
+//     different bed → this local record is a stale duplicate (the server
+//     moved the patient, or a double admit slipped through). It is removed
+//     outright, not discharged: pushing it again as an admission would make
+//     the server move the patient back and the two sides would flip-flop.
 //
 // Returns the SAME arrays when nothing changed, so callers (and the
 // real-time sync effect keyed on `beds`/`patients`) don't churn.
@@ -290,7 +295,20 @@ export function reconcileWithMediboard(
         !(serverOccupied && sb.patient_hospital_number === localPatient.hospitalNumber)
       ) {
         const closure = serverClosureFor(localPatient);
-        if (closure) {
+        const serverBedOfPatient = server.beds.find(
+          (b) =>
+            b.status === "occupied" &&
+            b.patient_hospital_number === localPatient.hospitalNumber &&
+            b.id !== sb.id,
+        );
+        if (serverBedOfPatient) {
+          console.warn(
+            `Bed ${sb.number}: Mediboard has ${localPatient.hospitalNumber} in ${serverBedOfPatient.number} — dropping the stale local admission here`,
+          );
+          nextPatients = nextPatients.filter((p) => p.id !== localPatient.id);
+          patientsChanged = true;
+          bed = { ...bed, status: "available", patientId: undefined, updatedAt: now };
+        } else if (closure) {
           // Discharged from the dashboard: mirror it here.
           const outcome = closure.status as Patient["dischargeType"];
           nextPatients = nextPatients.map((p) =>

@@ -24,7 +24,10 @@ export function DashboardPage({
   beds: Bed[];
   patients: Patient[];
   wards: Ward[];
-  onAdmit: (hospitalNumber: string, bedId: string) => void;
+  onAdmit: (
+    hospitalNumber: string,
+    bedId: string,
+  ) => { ok: boolean; error?: string };
   onDischarge: (
     patientId: string,
     bedId: string,
@@ -104,7 +107,11 @@ export function DashboardPage({
       );
       return;
     }
-    onAdmit(hnTrimmed, selectedBedId);
+    const result = onAdmit(hnTrimmed, selectedBedId);
+    if (!result.ok) {
+      showToast(result.error ?? "Could not admit", "error");
+      return;
+    }
     showToast(
       `Patient ${hnTrimmed} admitted to ${bedDisplayNumber(beds, selectedBed!.id)}`,
       "success",

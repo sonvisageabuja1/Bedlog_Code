@@ -230,8 +230,31 @@ export default function App() {
   }, []);
 
   // Actions
+  // One open admission per hospital number per ward — the same rule the
+  // server enforces. Without it a second admit for the same patient pushes
+  // as a "move" and the server and device disagree about which bed is real.
   const handleAdmit = useCallback(
-    (hospitalNumber: string, bedId: string) => {
+    (
+      hospitalNumber: string,
+      bedId: string,
+    ): { ok: boolean; error?: string } => {
+      const hn = hospitalNumber.trim();
+      const already = patients.find(
+        (p) =>
+          p.status === "admitted" &&
+          p.hospitalNumber.trim().toLowerCase() === hn.toLowerCase(),
+      );
+      if (already) {
+        const where = beds.find((b) => b.id === already.bedId);
+        return {
+          ok: false,
+          error: `HN ${hn} is already admitted${where ? ` to ${where.number}` : ""} — discharge or transfer first`,
+        };
+      }
+      const target = beds.find((b) => b.id === bedId);
+      if (!target || target.status !== "available") {
+        return { ok: false, error: "That bed is not available" };
+      }
       setBeds((prev) => {
         const bed = prev.find((b) => b.id === bedId);
         if (!bed || bed.status !== "available") return prev;
@@ -258,8 +281,9 @@ export default function App() {
             : b,
         );
       });
+      return { ok: true };
     },
-    [],
+    [beds, patients],
   );
 
   const handleDischarge = useCallback(
