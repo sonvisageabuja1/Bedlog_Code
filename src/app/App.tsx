@@ -28,7 +28,7 @@ import {
   syncBeds,
   setDeviceId,
   latestLocalChange,
-  reconcileBedsFromMediboard,
+  reconcileWithMediboard,
 } from "./lib/sync";
 import {
   buildMediboardSyncPayload,
@@ -370,17 +370,19 @@ export default function App() {
             ward.id,
             payload,
           );
-          // Pull: Mediboard's reply carries the ward's real bed list, so
-          // beds added/removed on the dashboard land here on every sync.
+          // Pull: Mediboard's reply carries the ward's real bed list and
+          // open admissions, so beds added/removed and patients admitted on
+          // the dashboard land here on every sync.
           if (device) {
-            setBeds((prev) =>
-              reconcileBedsFromMediboard(
-                prev,
-                ward.id,
-                device.beds,
-                KNOWN_BED_STATUSES,
-              ),
+            const merged = reconcileWithMediboard(
+              beds,
+              patients,
+              ward.id,
+              { beds: device.beds, patients: device.patients },
+              KNOWN_BED_STATUSES,
             );
+            if (merged.beds !== beds) setBeds(merged.beds);
+            if (merged.patients !== patients) setPatients(merged.patients);
             const w = device.ward;
             if (
               w.name !== ward.name ||

@@ -176,56 +176,144 @@ export interface MediboardBedSnapshot {
   id: string;
   number: string;
   status: string;
+  patient_hospital_number?: string | null;
 }
 
-// Merges the authoritative bed LIST from Mediboard (returned on every sync)
-// into the device's beds, so beds added or removed on the dashboard show up
-// without re-onboarding. Occupancy stays local:
-//  - beds Mediboard has that we don't are added (server status, no patient);
-//  - beds we have that Mediboard no longer lists are dropped, unless they
-//    are occupied here — a locally admitted patient must never vanish;
-//  - beds on both sides keep their local status/patient and take the
-//    server's bed number.
-// Returns the SAME array when nothing changed, so callers (and the
-// real-time sync effect keyed on `beds`) don't churn.
-export function reconcileBedsFromMediboard(
-  local: Bed[],
-  wardId: string,
-  server: MediboardBedSnapshot[],
-  knownStatuses: readonly BedStatus[],
-): Bed[] {
-  const localById = new Map(local.map((b) => [b.id, b]));
-  const serverIds = new Set(server.map((b) => b.id));
-  const now = Date.now();
-  const next: Bed[] = [];
+export interface MediboardPatientSnapshot {
+  id: string;
+  hospitalNumber: string;
+  admittedAt: number;
+  bedId: string;
+  status: string;
+}
 
-  for (const sb of server) {
+// Merges the authoritative state Mediboard returns on every sync into the
+// device's beds and patients, so what happens on the dashboard (beds added
+// or removed, a patient admitted from app-client) shows up here without
+// re-onboarding.
+//
+//  Bed LIST — the dashboard is the source of truth:
+//   - beds Mediboard has that we don't are added;
+//   - beds we have that Mediboard no longer lists are dropped, unless they
+//     are occupied here — a locally admitted patient must never vanish;
+//   - bed numbers are taken from the server.
+//
+//  OCCUPANCY — local wins where the device has its own patient, otherwise
+//  the server's open admission is adopted:
+//   - server occupied + local has no patient in that bed → mark occupied and
+//     create the local patient record from the server's current admission
+//     (this is the "admitted from app-client" case);
+//   - local occupied + server available → keep local; the device's own
+//     admission is pushed on this same sync and the server will show it
+//     occupied in the next reply;
+//   - both occupied with different patients → keep local, warn. Discharging
+//     locally then syncing resolves it.
+//
+// Returns the SAME arrays when nothing changed, so callers (and the
+// real-time sync effect keyed on `beds`/`patients`) don't churn.
+export function reconcileWithMediboard(
+  localBeds: Bed[],
+  localPatients: Patient[],
+  wardId: string,
+  server: { beds: MediboardBedSnapshot[]; patients: MediboardPatientSnapshot[] },
+  knownStatuses: readonly BedStatus[],
+): { beds: Bed[]; patients: Patient[] } {
+  const localById = new Map(localBeds.map((b) => [b.id, b]));
+  const serverIds = new Set(server.beds.map((b) => b.id));
+  const now = Date.now();
+  const nextBeds: Bed[] = [];
+  const nextPatients: Patient[] = [...localPatients];
+  let patientsChanged = false;
+
+  const localPatientFor = (bed: Bed | undefined) =>
+    bed?.patientId
+      ? localPatients.find((p) => p.id === bed.patientId && p.status === "admitted")
+      : undefined;
+
+  const serverAdmissionFor = (sb: MediboardBedSnapshot) =>
+    server.patients
+      .filter(
+        (p) =>
+          p.status === "admitted" &&
+          p.bedId === sb.id &&
+          (!sb.patient_hospital_number ||
+            p.hospitalNumber === sb.patient_hospital_number),
+      )
+      .sort((a, b) => b.admittedAt - a.admittedAt)[0];
+
+  for (const sb of server.beds) {
     const mine = localById.get(sb.id);
+    const serverOccupied = sb.status === "occupied";
+    const localPatient = localPatientFor(mine);
+
     if (mine) {
-      next.push(mine.number === sb.number ? mine : { ...mine, number: sb.number });
+      let bed = mine.number === sb.number ? mine : { ...mine, number: sb.number };
+      if (serverOccupied && !localPatient) {
+        const adm = serverAdmissionFor(sb);
+        const hospitalNumber = adm?.hospitalNumber ?? sb.patient_hospital_number;
+        if (hospitalNumber) {
+          const patient: Patient = {
+            id: uid(),
+            hospitalNumber,
+            admittedAt: adm?.admittedAt ?? now,
+            bedId: sb.id,
+            wardId,
+            status: "admitted",
+          };
+          nextPatients.push(patient);
+          patientsChanged = true;
+          bed = { ...bed, status: "occupied", patientId: patient.id, updatedAt: now };
+        }
+      } else if (
+        serverOccupied &&
+        localPatient &&
+        sb.patient_hospital_number &&
+        localPatient.hospitalNumber !== sb.patient_hospital_number
+      ) {
+        console.warn(
+          `Bed ${sb.number}: Mediboard has ${sb.patient_hospital_number} but this device has ${localPatient.hospitalNumber} — keeping the local admission`,
+        );
+      }
+      nextBeds.push(bed);
     } else {
-      next.push({
-        id: sb.id,
-        number: sb.number,
-        wardId,
-        status: knownStatuses.includes(sb.status as BedStatus)
-          ? (sb.status as BedStatus)
-          : "available",
-        updatedAt: now,
-      });
+      const status = knownStatuses.includes(sb.status as BedStatus)
+        ? (sb.status as BedStatus)
+        : "available";
+      let bed: Bed = { id: sb.id, number: sb.number, wardId, status, updatedAt: now };
+      if (serverOccupied) {
+        const adm = serverAdmissionFor(sb);
+        const hospitalNumber = adm?.hospitalNumber ?? sb.patient_hospital_number;
+        if (hospitalNumber) {
+          const patient: Patient = {
+            id: uid(),
+            hospitalNumber,
+            admittedAt: adm?.admittedAt ?? now,
+            bedId: sb.id,
+            wardId,
+            status: "admitted",
+          };
+          nextPatients.push(patient);
+          patientsChanged = true;
+          bed = { ...bed, patientId: patient.id };
+        }
+      }
+      nextBeds.push(bed);
     }
   }
-  for (const b of local) {
+  for (const b of localBeds) {
     if (!serverIds.has(b.id) && b.status === "occupied") {
       console.warn(
         `Bed ${b.number} was removed on Mediboard but is occupied here — keeping it`,
       );
-      next.push(b);
+      nextBeds.push(b);
     }
   }
 
-  const same =
-    next.length === local.length &&
-    next.every((b, i) => b === local[i]);
-  return same ? local : next;
+  const bedsSame =
+    nextBeds.length === localBeds.length &&
+    nextBeds.every((b, i) => b === localBeds[i]);
+  return {
+    beds: bedsSame ? localBeds : nextBeds,
+    patients: patientsChanged ? nextPatients : localPatients,
+  };
 }
