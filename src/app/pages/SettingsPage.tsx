@@ -1,8 +1,9 @@
 import { useContext, useEffect, useState } from "react";
-import { AlertTriangle, Eye } from "lucide-react";
+import { AlertTriangle, Eye, RefreshCw } from "lucide-react";
 import type { AppConfig, Bed, Ward } from "../types";
 import { KbContext } from "../lib/kbContext";
 import { setMediboardPin } from "../lib/mediboard";
+import { PinModal } from "../components/PinModal";
 import {
   hashPin,
   setCachedPinHash,
@@ -20,6 +21,7 @@ export function SettingsPage({
   onSyncNow,
   syncStatus,
   lastSync,
+  onDetach,
 }: {
   config: AppConfig;
   onSave: (c: AppConfig) => void;
@@ -28,7 +30,27 @@ export function SettingsPage({
   onSyncNow: (cfgOverride?: AppConfig) => void;
   syncStatus: "idle" | "sending" | "success" | "error";
   lastSync: { at: number; error?: string } | null;
+  // Releases this ward on Mediboard (PIN already verified by the caller's
+  // modal, forwarded here because the endpoint checks it again) and wipes
+  // local setup so the device returns to "Set up this device".
+  onDetach: (pin: string) => Promise<void>;
 }) {
+  const [detachPinOpen, setDetachPinOpen] = useState(false);
+  const [detachBusy, setDetachBusy] = useState(false);
+  const [detachError, setDetachError] = useState<string | null>(null);
+  const runDetach = async (pin: string) => {
+    setDetachPinOpen(false);
+    setDetachBusy(true);
+    setDetachError(null);
+    try {
+      await onDetach(pin);
+    } catch (e) {
+      setDetachError(
+        e instanceof Error ? e.message : "Couldn't detach this device",
+      );
+      setDetachBusy(false);
+    }
+  };
   const [draft, setDraft] = useState<AppConfig>(() =>
     JSON.parse(JSON.stringify(config)),
   );
@@ -368,6 +390,58 @@ export function SettingsPage({
           </div>
         </div>
 
+        {/* Ward Link — detach (Mediboard-linked devices only) */}
+        {draft.hospitalId && draft.wards[0] && (
+          <div className="flex flex-col">
+            <div className="px-[10px] py-[10px]">
+              <p
+                className="font-semibold text-[#0f172a] text-[16px] leading-[24px]"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                Ward Link
+              </p>
+              <p
+                className="text-[#8e8e93] text-[12px] mt-[2px]"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                This device is the only one linked to{" "}
+                {draft.wards[0].name}. Detach it to move the ward to
+                another device or to set this one up again.
+              </p>
+            </div>
+            <div className="bg-white rounded-[16px] border border-red-200 p-[16px] flex flex-col gap-[10px]">
+              <p
+                className="text-[12px] text-[#64748b] leading-relaxed"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                Detaching stops this device from syncing and clears
+                its local setup. Beds, patients, and history stay on
+                Mediboard. Requires the ward PIN and an internet
+                connection.
+              </p>
+              {detachError && (
+                <p className="text-[11px] text-[#dd2237] font-medium">
+                  {detachError}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setDetachError(null);
+                  setDetachPinOpen(true);
+                }}
+                disabled={detachBusy}
+                className="h-[44px] rounded-[10px] bg-white border border-[#dd2237] text-[#dd2237] text-[14px] font-bold active:opacity-70 disabled:opacity-40"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                {detachBusy
+                  ? "Detaching…"
+                  : "Detach this device from ward"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Data Sync */}
         <div className="flex flex-col">
           <div className="px-[10px] py-[10px]">
@@ -432,10 +506,10 @@ export function SettingsPage({
               </div>
             )}
 
-            {/* Auto-sync toggle — no time-of-day to set: syncs fire in
-                real time on every bed change while online, and this just
-                enables a periodic backstop that catches up anything that
-                didn't make it across (device was offline, etc). */}
+            {/* Auto-sync toggle — generic-endpoint mode only. A linked
+                device always syncs in real time and every few minutes;
+                there is deliberately no switch to turn that off. */}
+            {!draft.hospitalId && (
             <button
               onPointerDown={() =>
                 setDraft((d) => ({
@@ -467,18 +541,19 @@ export function SettingsPage({
                 Keep synced automatically
               </span>
             </button>
+            )}
 
-            {/* Send Now + status */}
+            {/* Sync Now + status */}
             <div className="flex items-center justify-between gap-[12px] pt-[4px] border-t border-black/10">
               <div className="pt-[10px]">
                 {syncStatus === "sending" && (
                   <span className="text-[12px] text-[#3469b2]">
-                    Sending…
+                    Syncing…
                   </span>
                 )}
                 {syncStatus === "success" && (
                   <span className="text-[12px] text-[#156f48] font-medium">
-                    ✓ Sent successfully
+                    ✓ Synced successfully
                   </span>
                 )}
                 {syncStatus === "error" && (
@@ -508,13 +583,17 @@ export function SettingsPage({
                   !(draft.hospitalId || draft.syncEndpoint) ||
                   syncStatus === "sending"
                 }
-                className="shrink-0 bg-[#3469b2] h-[38px] px-[16px] rounded-[10px] flex items-center justify-center active:opacity-80 disabled:opacity-40"
+                className="shrink-0 bg-[#3469b2] h-[38px] px-[16px] rounded-[10px] flex items-center justify-center gap-[8px] active:opacity-80 disabled:opacity-40"
               >
+                <RefreshCw
+                  size={14}
+                  className={`text-white ${syncStatus === "sending" ? "animate-spin" : ""}`}
+                />
                 <span
                   className="text-white text-[13px] font-semibold"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 >
-                  Send Now
+                  {syncStatus === "sending" ? "Syncing…" : "Sync Now"}
                 </span>
               </button>
             </div>
@@ -631,6 +710,16 @@ export function SettingsPage({
           </div>
         </div>
       </div>
+
+      {/* Detach — ward PIN, verified against Mediboard by the modal, then
+          forwarded so the detach endpoint can verify it again. */}
+      {detachPinOpen && (
+        <PinModal
+          config={config}
+          onSuccess={runDetach}
+          onCancel={() => setDetachPinOpen(false)}
+        />
+      )}
 
       {/* Ward details modal — view-only, managed from Mediboard. */}
       {wardModal && (

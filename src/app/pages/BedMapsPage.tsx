@@ -387,7 +387,7 @@ export function BedMapsPage({
                             )}
                         </div>
                         <p
-                          className="text-[22px] leading-[43px] font-medium whitespace-nowrap"
+                          className="text-[13px] leading-[20px] font-semibold whitespace-nowrap truncate max-w-full"
                           style={{
                             color: meta.color,
                             fontFamily:

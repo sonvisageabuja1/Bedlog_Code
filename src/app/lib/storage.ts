@@ -10,4 +10,5 @@ export const ls = {
   },
   set: <T,>(k: string, v: T) =>
     localStorage.setItem(k, JSON.stringify(v)),
+  remove: (k: string) => localStorage.removeItem(k),
 };

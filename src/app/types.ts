@@ -26,7 +26,9 @@ export interface Ward {
   id: string;
   name: string;
   code: string;
-  bedCount: number;
+  // Declared capacity from Mediboards. Not the number of beds — the beds
+  // list is the source of truth for that.
+  capacity: number;
   floor: string;
 }
 export interface Bed {

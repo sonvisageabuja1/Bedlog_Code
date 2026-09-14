@@ -1,5 +1,6 @@
 import type { AppConfig, Bed, BedStatus, Patient, Ward } from "../types";
 import { uid } from "./id";
+import { getOrCreateInstallId } from "./sync";
 
 // ─── MEDIBOARD API CLIENT ──────────────────────────────────────────────────────
 // BedLog's "mother product" — onboarding fetches hospital/ward data from here.
@@ -16,16 +17,18 @@ interface MediboardErrorResponse {
   message: string;
 }
 
-// One row per (hospital, department) pair — NOT the same thing as a ward.
-// `user_id` is the closest thing to a stable hospital identifier in this
-// response (there is no `hospital_id` field), confirmed by testing it
-// successfully as the `hospital_id` path param on the ward-fetch endpoint.
-export interface MediboardHospitalEntry {
-  user_id: string;
-  email: string;
-  hospital_name: string;
-  department_id: number;
-  department_name: string;
+export interface MediboardHospital {
+  id: string;
+  name: string;
+  // Cloudinary URL uploaded from the Mediboards admin, or null when the
+  // hospital has no logo yet — the picker shows a placeholder in that case.
+  logoUrl: string | null;
+}
+
+interface MediboardHospitalRow {
+  id: string;
+  name: string;
+  logo_url: string | null;
 }
 
 export interface MediboardDepartment {
@@ -33,25 +36,12 @@ export interface MediboardDepartment {
   name: string;
 }
 
-// A hospital deduped from the raw (hospital, department) list above —
-// what onboarding actually lets the admin search/pick from. `departments`
-// is collected from the same rows, since a ward is created against a
-// department (see `department_name` on the create-ward payload). Note
-// GET .../ward does NOT return a department reference on each ward, so
-// the department picked here can't be used to scope/filter the fetched
-// ward list — confirmed by testing, not just an API gap. Departments are
-// still shown so create-ward has a valid `department_name` to send.
-export interface MediboardHospital {
-  id: string; // == user_id from MediboardHospitalEntry
-  name: string;
-  departments: MediboardDepartment[];
-}
-
 export interface MediboardWard {
   id: string;
   name: string;
   code: string;
-  number_of_beds: number;
+  capacity: number;
+  bed_count: number;
   status: string;
   ward_section: string;
   hospital_id: string;
@@ -80,40 +70,33 @@ async function mediboardFetch<T>(path: string): Promise<T> {
   return body as T;
 }
 
-// Fetches every hospital across the whole Mediboard system (this endpoint
-// isn't scoped by hospital — despite its documented `[hospital_id]` path
-// segment, which 404s; the real working route takes no id) and dedupes the
-// raw (hospital, department) rows down to one entry per hospital.
+// Fetches every hospital across the whole Mediboard system — one row per
+// hospital, nothing else. Departments are fetched separately per hospital
+// (see fetchMediboardDepartments) once one is picked.
 export async function fetchMediboardHospitals(): Promise<
   MediboardHospital[]
 > {
   const { data } =
-    await mediboardFetch<MediboardListResponse<MediboardHospitalEntry>>(
-      "/hospital/create",
+    await mediboardFetch<MediboardListResponse<MediboardHospitalRow>>(
+      "/hospitals",
     );
-  const byId = new Map<string, MediboardHospital>();
-  for (const row of data) {
-    let hospital = byId.get(row.user_id);
-    if (!hospital) {
-      hospital = {
-        id: row.user_id,
-        name: row.hospital_name,
-        departments: [],
-      };
-      byId.set(row.user_id, hospital);
-    }
-    if (
-      !hospital.departments.some(
-        (d) => d.id === row.department_id,
-      )
-    ) {
-      hospital.departments.push({
-        id: row.department_id,
-        name: row.department_name,
-      });
-    }
-  }
-  return [...byId.values()];
+  return data.map((row) => ({
+    id: row.id,
+    name: row.name,
+    logoUrl: row.logo_url || null,
+  }));
+}
+
+// Active departments only — a ward is registered against a department
+// (see `departmentName` on the /setup payload), and hospitals with 20-30+
+// departments need this to make the ward list browsable.
+export async function fetchMediboardDepartments(
+  hospitalId: string,
+): Promise<MediboardDepartment[]> {
+  const { data } = await mediboardFetch<
+    MediboardListResponse<MediboardDepartment>
+  >(`/hospital/${encodeURIComponent(hospitalId)}/departments`);
+  return data;
 }
 
 export async function fetchMediboardWards(
@@ -169,6 +152,8 @@ interface MediboardWardDeviceEnvelope {
   data: {
     deviceId: string | null;
     deviceLabel: string | null;
+    deviceUid: string | null;
+    deviceAttachedAt: string | null;
     ward: {
       id: string;
       departmentId: number;
@@ -184,6 +169,11 @@ export interface MediboardWardInfo {
   departmentName: string;
   deviceId: string | null;
   deviceLabel: string | null;
+  // Install id of the physical device attached to this ward (see
+  // getOrCreateInstallId) — null when no device is attached. Compare
+  // against this install's own id to tell "mine" from "someone else's".
+  deviceUid: string | null;
+  deviceAttachedAt: string | null;
 }
 
 // Returns null (rather than throwing) on any failure — an unknown
@@ -203,6 +193,8 @@ export async function fetchMediboardWardInfo(
       departmentName: data.ward.departmentName,
       deviceId: data.deviceId,
       deviceLabel: data.deviceLabel,
+      deviceUid: data.deviceUid ?? null,
+      deviceAttachedAt: data.deviceAttachedAt ?? null,
     };
   } catch {
     return null;
@@ -214,12 +206,12 @@ export function mediboardWardToLocal(w: MediboardWard): Ward {
     id: w.id,
     name: w.name,
     code: w.code,
-    bedCount: w.number_of_beds,
+    capacity: w.capacity,
     floor: w.ward_section,
   };
 }
 
-const KNOWN_BED_STATUSES: readonly BedStatus[] = [
+export const KNOWN_BED_STATUSES: readonly BedStatus[] = [
   "available",
   "occupied",
   "cleaning",
@@ -349,7 +341,7 @@ async function withColdStartRetry<T>(fn: () => Promise<T>): Promise<T> {
 // Register a device for an existing ward — 2026-09-01, per the developer's
 // updated design: BedLog no longer creates wards at all; every ward comes
 // from Mediboard's own hospital account. `/setup` now takes a real, already-
-// existing `ward.id` (plus its current name/code/bedCount/floor) instead of
+// existing `ward.id` (plus its current name/code/capacity/floor) instead of
 // details for a brand-new ward, and registers a device against exactly that
 // ward — no ward-creation side effect anymore. Confirmed live, 2026-09-01,
 // against "Bedlog Test Ward" (a real ward with no prior device): issued a
@@ -372,6 +364,7 @@ export interface MediboardSetupDevice {
     id: string;
     name: string;
     code: string;
+    capacity: number;
     bedCount: number;
     floor: string;
   };
@@ -385,15 +378,22 @@ export interface MediboardSetupDevice {
   };
 }
 
+// Thrown when the ward is attached to a different device and the caller
+// did not ask to replace it (HTTP 409 from /setup).
+export class MediboardDeviceConflictError extends Error {
+  readonly status = 409;
+}
+
 async function registerMediboardDeviceOnce(
   hospitalId: string,
   params: {
-    departmentName: string;
+    departmentId: number;
+    replaceDevice?: boolean;
     ward: {
       id: string;
       name: string;
       code: string;
-      bedCount: number;
+      capacity: number;
       floor: string;
     };
   },
@@ -404,7 +404,9 @@ async function registerMediboardDeviceOnce(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        department_name: params.departmentName,
+        department_id: params.departmentId,
+        device_uid: getOrCreateInstallId(),
+        replace_device: params.replaceDevice ?? false,
         ward: params.ward,
       }),
     },
@@ -421,6 +423,9 @@ async function registerMediboardDeviceOnce(
     const message =
       (body as Partial<MediboardErrorResponse>)?.message ??
       `${res.status} ${res.statusText}`;
+    if (res.status === 409) {
+      throw new MediboardDeviceConflictError(message);
+    }
     throw new Error(`Mediboard request failed: ${message}`);
   }
   const envelope = body as {
@@ -438,12 +443,13 @@ async function registerMediboardDeviceOnce(
 export async function registerMediboardDevice(
   hospitalId: string,
   params: {
-    departmentName: string;
+    departmentId: number;
+    replaceDevice?: boolean;
     ward: {
       id: string;
       name: string;
       code: string;
-      bedCount: number;
+      capacity: number;
       floor: string;
     };
   },
@@ -460,7 +466,7 @@ export function mediboardSetupWardToLocal(
     id: device.ward.id,
     name: device.ward.name,
     code: device.ward.code,
-    bedCount: device.ward.bedCount,
+    capacity: device.ward.capacity,
     floor: device.ward.floor,
   };
 }
@@ -497,6 +503,9 @@ export function buildMediboardSyncPayload(
   const patientById = new Map(patients.map((p) => [p.id, p]));
   return {
     deviceId: config.deviceId,
+    // Mediboard refuses a sync from any install other than the one attached
+    // to the ward — this is what keeps ward/device strictly one-to-one.
+    deviceUid: getOrCreateInstallId(),
     deviceLabel:
       config.deviceLabel ?? `${ward?.name ?? "Ward"} - Bed Log`,
     generatedAt: new Date().toISOString(),
@@ -509,7 +518,8 @@ export function buildMediboardSyncPayload(
           id: ward.id,
           name: ward.name,
           code: ward.code,
-          bedCount: ward.bedCount,
+          capacity: ward.capacity,
+          bedCount: beds.filter((b) => b.wardId === ward.id).length,
           floor: ward.floor,
         }
       : null,
@@ -587,7 +597,7 @@ async function syncMediboardWardOnce(
   hospitalId: string,
   wardId: string,
   payload: unknown,
-): Promise<void> {
+): Promise<MediboardSetupDevice | null> {
   const res = await fetch(
     `${MEDIBOARD_BASE_URL}/hospital/${encodeURIComponent(hospitalId)}/ward/${encodeURIComponent(wardId)}/sync`,
     {
@@ -610,19 +620,25 @@ async function syncMediboardWardOnce(
       `${res.status} ${res.statusText}`;
     throw new Error(`Mediboard request failed: ${message}`);
   }
-  const envelope = body as { success?: boolean };
+  const envelope = body as {
+    success?: boolean;
+    data?: { deviceState?: MediboardSetupDevice };
+  };
   if (!envelope.success) {
     throw new Error(
       "Mediboard request returned an unexpected response",
     );
   }
+  // Mediboard answers every sync with the ward's authoritative state after
+  // commit — the caller reconciles its bed list from it.
+  return envelope.data?.deviceState ?? null;
 }
 
 export async function syncMediboardWard(
   hospitalId: string,
   wardId: string,
   payload: unknown,
-): Promise<void> {
+): Promise<MediboardSetupDevice | null> {
   return withColdStartRetry(() =>
     syncMediboardWardOnce(hospitalId, wardId, payload),
   );
@@ -715,5 +731,48 @@ export async function setMediboardPin(
 ): Promise<void> {
   return withColdStartRetry(() =>
     setMediboardPinOnce(hospitalId, wardId, pin),
+  );
+}
+
+// ─── DETACH ───────────────────────────────────────────────────────────────────
+// Releases this ward on Mediboard so another device can be set up for it.
+// PIN-guarded server-side; Mediboard also refuses the call if the ward is
+// attached to a different install than this one.
+async function detachMediboardDeviceOnce(
+  hospitalId: string,
+  wardId: string,
+  pin: string,
+): Promise<void> {
+  const res = await fetch(
+    `${MEDIBOARD_BASE_URL}/hospital/${encodeURIComponent(hospitalId)}/ward/${encodeURIComponent(wardId)}/device`,
+    {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin, device_uid: getOrCreateInstallId() }),
+    },
+  );
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    throw new Error(
+      `Mediboard request failed: ${res.status} ${res.statusText}`,
+    );
+  }
+  if (!res.ok) {
+    const message =
+      (body as Partial<MediboardErrorResponse>)?.message ??
+      `${res.status} ${res.statusText}`;
+    throw new Error(message);
+  }
+}
+
+export async function detachMediboardDevice(
+  hospitalId: string,
+  wardId: string,
+  pin: string,
+): Promise<void> {
+  return withColdStartRetry(() =>
+    detachMediboardDeviceOnce(hospitalId, wardId, pin),
   );
 }

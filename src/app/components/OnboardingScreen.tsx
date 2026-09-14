@@ -1,15 +1,17 @@
 import { useContext, useEffect, useRef, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Hospital } from "lucide-react";
 import type { AppConfig, Bed, Patient } from "../types";
 import { KbContext } from "../lib/kbContext";
+import { getOrCreateInstallId } from "../lib/sync";
 import {
+  fetchMediboardDepartments,
   fetchMediboardHospitals,
   fetchMediboardWardInfo,
   fetchMediboardWardSeed,
   fetchMediboardWards,
   mediboardDeviceStateToLocal,
   mediboardSetupWardToLocal,
-  mediboardWardToLocal,
+  MediboardDeviceConflictError,
   registerMediboardDevice,
   type MediboardDepartment,
   type MediboardHospital,
@@ -98,7 +100,14 @@ export function OnboardingScreen({
   const [departmentQuery, setDepartmentQuery] = useState("");
   const [departmentDropdownOpen, setDepartmentDropdownOpen] =
     useState(false);
-  const departments = selectedHospital?.departments ?? [];
+  // Active departments for the picked hospital, fetched on entering step 2.
+  const [departments, setDepartments] = useState<MediboardDepartment[]>(
+    [],
+  );
+  const [departmentsLoading, setDepartmentsLoading] = useState(false);
+  const [departmentsError, setDepartmentsError] = useState<
+    string | null
+  >(null);
   const filteredDepartments = departments.filter((d) =>
     d.name.toLowerCase().includes(departmentQuery.toLowerCase()),
   );
@@ -133,14 +142,10 @@ export function OnboardingScreen({
   const [wardSeedError, setWardSeedError] = useState<
     string | null
   >(null);
-  // Set when the picked existing ward already has a real Mediboard
-  // deviceId (from a prior /setup) — inheriting it lets this device
-  // /sync immediately instead of getting a locally-generated id Mediboard
-  // has never heard of. Null means this ward has never had a device.
-  const [inheritedDevice, setInheritedDevice] = useState<{
-    deviceId: string;
-    deviceLabel: string;
-  } | null>(null);
+  // Ward/device is one-to-one on Mediboard. Picking a ward that is already
+  // attached to a *different* install shows a warning and needs a second,
+  // explicit confirmation before /setup is asked to replace that device.
+  const [replaceConfirm, setReplaceConfirm] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>(
     {},
   );
@@ -180,11 +185,31 @@ export function OnboardingScreen({
       });
   };
 
+  const loadDepartments = (hospitalId: string) => {
+    setDepartmentsLoading(true);
+    setDepartmentsError(null);
+    setDepartments([]);
+    fetchMediboardDepartments(hospitalId)
+      .then((list) => {
+        setDepartments(list);
+        setDepartmentsLoading(false);
+      })
+      .catch((e: unknown) => {
+        setDepartmentsError(
+          e instanceof Error
+            ? e.message
+            : "Failed to load departments",
+        );
+        setDepartmentsLoading(false);
+      });
+  };
+
   useEffect(() => {
     if (step === 2 && selectedHospital?.id) {
       setSelectedDepartment(null);
       setDepartmentQuery("");
       setShowAllWards(false);
+      loadDepartments(selectedHospital.id);
       loadWards(selectedHospital.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -215,7 +240,7 @@ export function OnboardingScreen({
     setWardQuery("");
     setWardSeed(null);
     setWardSeedError(null);
-    setInheritedDevice(null);
+    setReplaceConfirm(false);
   };
 
   const pickWard = (w: MediboardWard) => {
@@ -225,18 +250,7 @@ export function OnboardingScreen({
     setWardSeed(null);
     setWardSeedError(null);
     setCreateWardError(null);
-    // Inherit this ward's real deviceId if one already exists (it went
-    // through /setup before, on this or a prior install) — otherwise this
-    // device has none yet, and one gets registered on Finish.
-    const info = wardInfo[w.id];
-    setInheritedDevice(
-      info?.deviceId
-        ? {
-            deviceId: info.deviceId,
-            deviceLabel: info.deviceLabel ?? `${w.name} - Bed Log`,
-          }
-        : null,
-    );
+    setReplaceConfirm(false);
     if (selectedHospital?.id) {
       setWardSeedLoading(true);
       fetchMediboardWardSeed(selectedHospital.id, w.id)
@@ -274,32 +288,35 @@ export function OnboardingScreen({
     return Object.keys(errs).length === 0;
   };
 
-  // Two paths, both against the same real, already-existing ward (BedLog
-  // never creates one):
-  //  - Already has a `deviceId` (from a prior `/setup`, this or another
-  //    install) — nothing to register, just continue with the bed/patient
-  //    data `pickWard` already fetched via `/device`.
-  //  - No `deviceId` yet — register one now via `/setup`'s updated shape
-  //    (2026-09-01: takes a real, existing `ward.id` instead of details for
-  //    a new ward, and only ever registers a device — never creates
-  //    anything). Confirmed live this only ever needs calling once per
-  //    ward; a ward that already has a device always takes the branch
-  //    above instead, so this can't re-issue or orphan an existing one.
-  const handleFinish = async () => {
+  // Which physical install (if any) Mediboard says this ward is attached to.
+  const installId = getOrCreateInstallId();
+  const selectedWardInfo = selectedWardId
+    ? wardInfo[selectedWardId]
+    : undefined;
+  const attachedDevice = selectedWardInfo?.deviceUid
+    ? {
+        uid: selectedWardInfo.deviceUid,
+        label: selectedWardInfo.deviceLabel ?? "another Bedlog device",
+        attachedAt: selectedWardInfo.deviceAttachedAt,
+      }
+    : null;
+  const attachedToOtherDevice =
+    !!attachedDevice && attachedDevice.uid !== installId;
+  const attachedToThisDevice =
+    !!attachedDevice && attachedDevice.uid === installId;
+
+  // Always goes through /setup, which is idempotent for a ward this install
+  // is already attached to and is the only call that attaches a device.
+  // A ward attached to a different install is refused (409) unless the
+  // admin confirmed the takeover, in which case `replace` is sent and the
+  // old device's syncs are rejected from then on.
+  const handleFinish = async (replace = false) => {
     if (!validateStep2()) return;
     const ward = wards.find((w) => w.id === selectedWardId);
     if (!ward || !selectedHospital?.id || !selectedDepartment) return;
 
-    if (inheritedDevice) {
-      onComplete(
-        {
-          hospitalName: selectedHospital.name,
-          hospitalId: selectedHospital.id,
-          wards: [mediboardWardToLocal(ward)],
-        },
-        wardSeed ?? undefined,
-        inheritedDevice,
-      );
+    if (attachedToOtherDevice && !replace) {
+      setReplaceConfirm(true);
       return;
     }
 
@@ -309,12 +326,13 @@ export function OnboardingScreen({
       const device = await registerMediboardDevice(
         selectedHospital.id,
         {
-          departmentName: selectedDepartment.name,
+          departmentId: selectedDepartment.id,
+          replaceDevice: attachedToOtherDevice && replace,
           ward: {
             id: ward.id,
             name: ward.name,
             code: ward.code,
-            bedCount: ward.number_of_beds,
+            capacity: ward.capacity,
             floor: ward.ward_section,
           },
         },
@@ -338,6 +356,14 @@ export function OnboardingScreen({
       );
     } catch (e) {
       setCreatingWardBusy(false);
+      setReplaceConfirm(false);
+      if (e instanceof MediboardDeviceConflictError) {
+        // Someone attached a device between the ward list loading and
+        // Finish — refresh what we know so the warning shows.
+        setWardInfo((prev) => ({ ...prev }));
+        setCreateWardError(e.message);
+        return;
+      }
       setCreateWardError(
         e instanceof Error
           ? e.message
@@ -501,7 +527,7 @@ export function OnboardingScreen({
                                   setHospitalDropdownOpen(false);
                                   setErrors({});
                                 }}
-                                className="w-full text-left px-4 py-3 text-[14px] font-medium whitespace-nowrap active:bg-[rgba(52,105,178,0.05)] border-b border-[rgba(0,0,0,0.05)] last:border-b-0"
+                                className="w-full flex items-center gap-3 text-left px-3 py-2.5 text-[14px] font-medium active:bg-[rgba(52,105,178,0.05)] border-b border-[rgba(0,0,0,0.05)] last:border-b-0"
                                 style={{
                                   color:
                                     selectedHospital?.id === h.id
@@ -509,7 +535,11 @@ export function OnboardingScreen({
                                       : "#0f172a",
                                 }}
                               >
-                                {h.name}
+                                <HospitalLogo
+                                  src={h.logoUrl}
+                                  name={h.name}
+                                />
+                                <span className="truncate">{h.name}</span>
                               </button>
                             ))
                           )}
@@ -586,9 +616,14 @@ export function OnboardingScreen({
                       openFor(e.currentTarget);
                       setDepartmentDropdownOpen(true);
                     }}
-                    placeholder="Search or tap to browse departments…"
+                    placeholder={
+                      departmentsLoading
+                        ? "Loading departments…"
+                        : "Search or tap to browse departments…"
+                    }
                     autoComplete="off"
-                    className="w-full h-12 bg-[#f4f6f9] rounded-[12px] border-2 px-4 pr-11 text-[15px] font-semibold text-[#0f172a] placeholder-[rgba(15,23,42,0.35)] focus:outline-none transition-colors"
+                    disabled={departmentsLoading || !!departmentsError}
+                    className="w-full h-12 bg-[#f4f6f9] rounded-[12px] border-2 px-4 pr-11 text-[15px] font-semibold text-[#0f172a] placeholder-[rgba(15,23,42,0.35)] focus:outline-none transition-colors disabled:opacity-50"
                     style={{
                       borderColor: errors.department
                         ? "#dd2237"
@@ -609,7 +644,8 @@ export function OnboardingScreen({
                         setDepartmentDropdownOpen((o) => !o);
                       }
                     }}
-                    className="absolute right-0 top-0 h-12 w-11 flex items-center justify-center text-[#64748b]"
+                    disabled={departmentsLoading || !!departmentsError}
+                    className="absolute right-0 top-0 h-12 w-11 flex items-center justify-center text-[#64748b] disabled:opacity-40"
                   >
                     {selectedDepartment || departmentQuery ? (
                       <svg
@@ -643,12 +679,15 @@ export function OnboardingScreen({
                     )}
                   </button>
 
-                  {departmentDropdownOpen && (
+                  {departmentDropdownOpen &&
+                    !departmentsLoading &&
+                    !departmentsError && (
                     <div className="absolute top-[calc(100%+6px)] left-0 right-0 z-20 bg-white rounded-[12px] border border-[rgba(0,0,0,0.1)] shadow-lg max-h-64 overflow-y-auto">
                       {filteredDepartments.length === 0 ? (
                         <p className="text-center text-[13px] text-[#94a3b8] py-6 px-3">
-                          No departments match "
-                          {departmentQuery}"
+                          {departments.length === 0
+                            ? "This hospital has no active departments yet"
+                            : `No departments match "${departmentQuery}"`}
                         </p>
                       ) : (
                         filteredDepartments.map((d) => (
@@ -674,6 +713,28 @@ export function OnboardingScreen({
                   <p className="text-[#dd2237] text-xs mt-1.5 font-medium">
                     {errors.department}
                   </p>
+                )}
+                {departmentsError && (
+                  <div className="flex flex-col gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-3 mt-2">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle
+                        size={14}
+                        className="text-[#dd2237] mt-0.5 shrink-0"
+                      />
+                      <p className="text-[11px] text-[#dd2237] leading-relaxed">
+                        {departmentsError}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() =>
+                        selectedHospital?.id &&
+                        loadDepartments(selectedHospital.id)
+                      }
+                      className="text-[12px] font-semibold text-[#3469b2] text-left"
+                    >
+                      Try again
+                    </button>
+                  </div>
                 )}
               </div>
             }
@@ -835,7 +896,7 @@ export function OnboardingScreen({
                                     </p>
                                     <p className="text-[11px] text-[#64748b] mt-0.5">
                                       {w.code} ·{" "}
-                                      {w.number_of_beds} beds
+                                      {w.bed_count} beds · capacity {w.capacity}
                                       {w.ward_section
                                         ? ` · ${w.ward_section}`
                                         : ""}
@@ -862,7 +923,7 @@ export function OnboardingScreen({
                         setWardQuery("");
                         setWardSeed(null);
                         setWardSeedError(null);
-                        setInheritedDevice(null);
+                        setReplaceConfirm(false);
                         setCreateWardError(null);
                       }}
                       className="text-[11px] font-semibold text-[#64748b]"
@@ -896,17 +957,36 @@ export function OnboardingScreen({
                         available from Mediboard
                       </p>
                     )}
-                    {inheritedDevice ? (
-                      <p className="text-[11px] text-[#156f48] font-medium mt-1">
-                        ✓ Linked to this ward's existing Mediboard
-                        device — sync will work right away.
+                    {attachedToOtherDevice && attachedDevice ? (
+                      <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 mt-2">
+                        <AlertTriangle
+                          size={14}
+                          className="text-[#dd2237] mt-0.5 shrink-0"
+                        />
+                        <p className="text-[11px] text-[#dd2237] leading-relaxed">
+                          <span className="font-bold">
+                            This ward is already set up on another
+                            device
+                          </span>{" "}
+                          ({attachedDevice.label}
+                          {attachedDevice.attachedAt
+                            ? `, since ${new Date(attachedDevice.attachedAt).toLocaleDateString()}`
+                            : ""}
+                          ). A ward can only be linked to one Bedlog
+                          device. Finishing here will replace that
+                          device and it will stop syncing.
+                        </p>
+                      </div>
+                    ) : attachedToThisDevice ? (
+                      <p className="text-[11px] text-[#3469b2] font-medium mt-1">
+                        This device is already linked to this ward —
+                        finishing will simply refresh it.
                       </p>
                     ) : (
-                      wardInfo[selectedWardId] !== undefined && (
+                      selectedWardInfo !== undefined && (
                         <p className="text-[11px] text-[#ff662f] font-medium mt-1">
-                          This ward hasn't been linked to a
-                          Mediboard device yet — one will be
-                          registered automatically when you finish.
+                          No device is linked to this ward yet — this
+                          one will be attached when you finish.
                         </p>
                       )
                     )}
@@ -941,10 +1021,10 @@ export function OnboardingScreen({
                         </div>
                         <div className="flex-1">
                           <label className="block text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-1.5">
-                            Number of Beds
+                            Beds / Capacity
                           </label>
                           <div className="w-full h-10 bg-[#f4f6f9] rounded-[10px] border-2 border-[#e2e8f0] px-3 flex items-center text-[14px] font-semibold text-[#0f172a] opacity-50 cursor-not-allowed">
-                            {ward.number_of_beds}
+                            {ward.bed_count} / {ward.capacity}
                           </div>
                         </div>
                       </div>
@@ -998,17 +1078,47 @@ export function OnboardingScreen({
                 </p>
               </div>
             )}
+            {replaceConfirm && attachedToOtherDevice && (
+              <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-3 mb-1 flex flex-col gap-2">
+                <p className="text-[12px] text-[#dd2237] font-semibold leading-relaxed">
+                  Replace the device currently linked to this ward?
+                  That device will be detached and will no longer
+                  sync. This can't be undone from here.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleFinish(true)}
+                    disabled={creatingWardBusy}
+                    className="flex-1 h-10 rounded-[10px] text-white text-[13px] font-bold active:scale-[0.98] disabled:opacity-40"
+                    style={{ backgroundColor: "#dd2237" }}
+                  >
+                    Yes, replace it
+                  </button>
+                  <button
+                    onClick={() => setReplaceConfirm(false)}
+                    disabled={creatingWardBusy}
+                    className="flex-1 h-10 rounded-[10px] bg-white border border-red-200 text-[#dd2237] text-[13px] font-semibold active:opacity-70 disabled:opacity-40"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
             <button
-              onClick={handleFinish}
-              disabled={!selectedWardId || creatingWardBusy}
+              onClick={() => handleFinish(false)}
+              disabled={
+                !selectedWardId || creatingWardBusy || replaceConfirm
+              }
               className="w-full h-12 rounded-[12px] text-white text-[15px] font-bold active:scale-[0.98] transition-all disabled:opacity-40"
               style={{ backgroundColor: "#156f48" }}
             >
               {creatingWardBusy
                 ? "Setting up on Mediboard…"
-                : inheritedDevice
-                  ? "Continue →"
-                  : "Finish Setup →"}
+                : attachedToOtherDevice
+                  ? "Replace device & finish →"
+                  : attachedToThisDevice
+                    ? "Re-link this device →"
+                    : "Finish Setup →"}
             </button>
             <button
               onClick={() => setStep(1)}
@@ -1058,5 +1168,38 @@ export function OnboardingScreen({
       </div>
     )}
     </>
+  );
+}
+
+// Logo thumbnail for the hospital picker — falls back to a generic
+// hospital glyph when there's no logo, or the image URL fails to load
+// (Cloudinary asset deleted, no internet mid-list, etc).
+function HospitalLogo({
+  src,
+  name,
+}: {
+  src: string | null;
+  name: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  const showImage = !!src && !failed;
+  return (
+    <span
+      className="shrink-0 w-9 h-9 rounded-[10px] bg-[#f4f6f9] border border-[rgba(0,0,0,0.06)] overflow-hidden flex items-center justify-center"
+      aria-hidden="true"
+    >
+      {showImage ? (
+        <img
+          src={src}
+          alt={`${name} logo`}
+          loading="lazy"
+          onError={() => setFailed(true)}
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <Hospital size={18} className="text-[#94a3b8]" />
+      )}
+    </span>
   );
 }

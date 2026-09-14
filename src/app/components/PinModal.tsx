@@ -23,7 +23,9 @@ export function PinModal({
   onCancel,
 }: {
   config: AppConfig;
-  onSuccess: () => void;
+  // Receives the PIN that was just verified, for callers that must forward
+  // it to a PIN-guarded Mediboard endpoint (e.g. detach).
+  onSuccess: (pin: string) => void;
   onCancel: () => void;
 }) {
   const [digits, setDigits] = useState<string[]>([]);
@@ -83,7 +85,7 @@ export function PinModal({
         .then((ok) => {
           setChecking(false);
           if (ok) {
-            onSuccess();
+            onSuccess(next.join(""));
           } else {
             fail("Incorrect PIN");
           }

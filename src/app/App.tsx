@@ -25,12 +25,15 @@ import {
   isConfigValid,
   buildSyncPayload,
   sendSyncPayload,
-  makeBeds,
   syncBeds,
   setDeviceId,
+  latestLocalChange,
+  reconcileBedsFromMediboard,
 } from "./lib/sync";
 import {
   buildMediboardSyncPayload,
+  detachMediboardDevice,
+  KNOWN_BED_STATUSES,
   syncMediboardWard,
 } from "./lib/mediboard";
 import { DashboardNavIcon } from "./components/icons/DashboardNavIcon";
@@ -92,6 +95,10 @@ class ErrorBoundary extends React.Component<
 }
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
+
+// How often a linked device syncs with nothing to push, purely to pull the
+// dashboard's bed list. A few requests an hour is nothing on a Pi.
+const PULL_INTERVAL_MS = 5 * 60_000;
 
 export default function App() {
   const [appState, setAppState] = useState<
@@ -358,7 +365,45 @@ export default function App() {
             beds,
             patients,
           );
-          await syncMediboardWard(cfg.hospitalId, ward.id, payload);
+          const device = await syncMediboardWard(
+            cfg.hospitalId,
+            ward.id,
+            payload,
+          );
+          // Pull: Mediboard's reply carries the ward's real bed list, so
+          // beds added/removed on the dashboard land here on every sync.
+          if (device) {
+            setBeds((prev) =>
+              reconcileBedsFromMediboard(
+                prev,
+                ward.id,
+                device.beds,
+                KNOWN_BED_STATUSES,
+              ),
+            );
+            const w = device.ward;
+            if (
+              w.name !== ward.name ||
+              w.code !== ward.code ||
+              w.capacity !== ward.capacity ||
+              w.floor !== ward.floor
+            ) {
+              setConfig((c) => ({
+                ...c,
+                wards: c.wards.map((x) =>
+                  x.id === ward.id
+                    ? {
+                        ...x,
+                        name: w.name,
+                        code: w.code,
+                        capacity: w.capacity,
+                        floor: w.floor,
+                      }
+                    : x,
+                ),
+              }));
+            }
+          }
         } else if (cfg.syncEndpoint) {
           const payload = buildSyncPayload(cfg, beds, patients);
           const result = await sendSyncPayload(
@@ -390,25 +435,22 @@ export default function App() {
   // than the last successful sync — if so, something didn't make it across
   // (the real-time sync below only fires while online, so this is what
   // catches up a device that was offline, or where a real-time attempt
-  // failed) — and retries while online. A Mediboard-linked device doesn't
-  // need syncEndpoint set — it always has somewhere to sync to.
+  // failed) — and retries while online. A Mediboard-linked device always
+  // runs this (offline-first rule: sync is opportunistic and automatic, no
+  // switch to forget); only the generic-endpoint mode has a toggle.
   useEffect(() => {
-    if (
-      !config.syncEnabled ||
-      !(config.hospitalId || config.syncEndpoint)
-    )
-      return;
+    const linked = !!config.hospitalId;
+    if (!linked && !(config.syncEnabled && config.syncEndpoint)) return;
     const check = () => {
       if (!online) return;
-      const lastLocalChange = Math.max(
-        0,
-        ...beds.map((b) => b.updatedAt),
-        ...patients.flatMap((p) => [
-          p.admittedAt,
-          p.dischargedAt ?? 0,
-        ]),
-      );
-      if (lastLocalChange > (lastSuccessfulSyncAt ?? 0)) {
+      const lastLocalChange = latestLocalChange(beds, patients);
+      // Linked devices also sync on a timer even with nothing local to
+      // push, because every sync doubles as a pull of the dashboard's bed
+      // list (see triggerSync).
+      const stale =
+        !!config.hospitalId &&
+        Date.now() - (lastSuccessfulSyncAt ?? 0) > PULL_INTERVAL_MS;
+      if (lastLocalChange > (lastSuccessfulSyncAt ?? 0) || stale) {
         triggerSync();
       }
     };
@@ -428,7 +470,7 @@ export default function App() {
 
   // Real-time sync: fire automatically the moment a bed's status changes
   // (admit/discharge/transfer/status update) — not just from the manual
-  // "Send Now" button or the periodic catch-up above. Only while online and
+  // "Sync Now" button or the periodic catch-up above. Only while online and
   // once the device is actually in normal use (skips the very first run,
   // which is just initial load rather than a real change; skips onboarding
   // entirely). Silently does nothing if there's nowhere to sync to yet.
@@ -444,6 +486,39 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [beds, patients]);
 
+  // Releases the ward on Mediboard, then wipes local setup so the device
+  // is back to "Set up this device". Install id is kept on purpose so this
+  // same Pi is recognised as "mine" if it's set up for the ward again.
+  const handleDetach = useCallback(
+    async (pin: string) => {
+      const ward = config.wards[0];
+      if (!config.hospitalId || !ward) {
+        throw new Error("This device isn't linked to a Mediboard ward");
+      }
+      await detachMediboardDevice(config.hospitalId, ward.id, pin);
+      for (const key of [
+        "bl_beds",
+        "bl_patients",
+        "bl_cached_pin_hash",
+        "bl_pin_changed",
+      ]) {
+        ls.remove(key);
+      }
+      const fresh: AppConfig = {
+        hospitalName: "",
+        wards: [],
+        deviceId: getOrCreateDeviceId(),
+      };
+      ls.set("bl_config", fresh);
+      setConfig(fresh);
+      setBeds([]);
+      setPatients([]);
+      setPage("dashboard");
+      setAppState("needsSetup");
+    },
+    [config],
+  );
+
   const handleOnboardingComplete = useCallback(
     (
       c: Omit<AppConfig, "deviceId" | "deviceLabel">,
@@ -458,13 +533,18 @@ export default function App() {
       const fullConfig: AppConfig = {
         ...config,
         ...c,
+        // Linked devices sync on a timer by default — that timer is also
+        // how dashboard-side bed changes reach the device.
+        syncEnabled: c.hospitalId ? true : config.syncEnabled,
         deviceId: deviceOverride?.deviceId ?? getOrCreateDeviceId(),
         deviceLabel: deviceOverride?.deviceLabel,
       };
       // `seed` is real bed/patient data fetched from Mediboard for an
       // existing ward, handed over by onboarding — inherit it instead of
       // resetting everyone to "available" when it's available and valid.
-      const initialBeds = seed?.beds ?? makeBeds(fullConfig.wards);
+      // No seed means the fetch failed — start empty rather than inventing
+      // beds from capacity; the next sync pulls the real list.
+      const initialBeds = seed?.beds ?? [];
       const initialPatients = seed?.patients ?? [];
       ls.set("bl_config", fullConfig);
       ls.set("bl_beds", initialBeds);
@@ -539,6 +619,17 @@ export default function App() {
             <>
               <TopBar
                 onSettingsPress={() => setShowPinModal(true)}
+                sync={{
+                  enabled: !!(config.hospitalId || config.syncEndpoint),
+                  online,
+                  status: syncStatus,
+                  lastSuccessfulAt: lastSuccessfulSyncAt,
+                  lastError: lastSync?.error,
+                  pullIntervalMs: PULL_INTERVAL_MS,
+                  hasUnsynced:
+                    latestLocalChange(beds, patients) >
+                    (lastSuccessfulSyncAt ?? 0),
+                }}
               />
 
               <main
@@ -604,6 +695,7 @@ export default function App() {
                     onSyncNow={triggerSync}
                     syncStatus={syncStatus}
                     lastSync={lastSync}
+                    onDetach={handleDetach}
                   />
                 )}
               </main>

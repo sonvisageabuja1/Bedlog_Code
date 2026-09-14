@@ -123,9 +123,9 @@ export function WardModal({
                   fontFamily: "'Plus Jakarta Sans', sans-serif",
                 }}
               >
-                Number of Beds
+                Capacity
               </p>
-              <div className={fieldClass}>{ward.bedCount}</div>
+              <div className={fieldClass}>{ward.capacity}</div>
             </div>
             <div className="flex flex-col gap-[8px] flex-1">
               <p
