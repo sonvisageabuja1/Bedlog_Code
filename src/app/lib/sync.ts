@@ -207,10 +207,21 @@ export interface MediboardPatientSnapshot {
 //     admission is pushed on this same sync and the server will show it
 //     occupied in the next reply;
 //   - both occupied with different patients → keep local, warn. Discharging
-//     locally then syncing resolves it.
+//     locally then syncing resolves it;
+//   - local occupied, but the server shows THIS stay closed (a discharge /
+//     LAMA / deceased / absconded event for the same patient, bed and
+//     admission time — i.e. done from app-client) → discharge locally with
+//     that outcome and free the bed.
 //
 // Returns the SAME arrays when nothing changed, so callers (and the
 // real-time sync effect keyed on `beds`/`patients`) don't churn.
+const CLOSED_OUTCOMES: readonly string[] = [
+  "discharged",
+  "deceased",
+  "lama",
+  "absconded",
+];
+
 export function reconcileWithMediboard(
   localBeds: Bed[],
   localPatients: Patient[],
@@ -222,8 +233,18 @@ export function reconcileWithMediboard(
   const serverIds = new Set(server.beds.map((b) => b.id));
   const now = Date.now();
   const nextBeds: Bed[] = [];
-  const nextPatients: Patient[] = [...localPatients];
+  let nextPatients: Patient[] = [...localPatients];
   let patientsChanged = false;
+
+  // A closing event on the server for the same stay as a local admission.
+  const serverClosureFor = (p: Patient) =>
+    server.patients.find(
+      (e) =>
+        e.hospitalNumber === p.hospitalNumber &&
+        e.bedId === p.bedId &&
+        CLOSED_OUTCOMES.includes(e.status) &&
+        Math.abs(e.admittedAt - p.admittedAt) < 60_000,
+    );
 
   const localPatientFor = (bed: Bed | undefined) =>
     bed?.patientId
@@ -265,14 +286,25 @@ export function reconcileWithMediboard(
           bed = { ...bed, status: "occupied", patientId: patient.id, updatedAt: now };
         }
       } else if (
-        serverOccupied &&
         localPatient &&
-        sb.patient_hospital_number &&
-        localPatient.hospitalNumber !== sb.patient_hospital_number
+        !(serverOccupied && sb.patient_hospital_number === localPatient.hospitalNumber)
       ) {
-        console.warn(
-          `Bed ${sb.number}: Mediboard has ${sb.patient_hospital_number} but this device has ${localPatient.hospitalNumber} — keeping the local admission`,
-        );
+        const closure = serverClosureFor(localPatient);
+        if (closure) {
+          // Discharged from the dashboard: mirror it here.
+          const outcome = closure.status as Patient["dischargeType"];
+          nextPatients = nextPatients.map((p) =>
+            p.id === localPatient.id
+              ? { ...p, status: "discharged", dischargeType: outcome, dischargedAt: now }
+              : p,
+          );
+          patientsChanged = true;
+          bed = { ...bed, status: "available", patientId: undefined, updatedAt: now };
+        } else if (serverOccupied && sb.patient_hospital_number) {
+          console.warn(
+            `Bed ${sb.number}: Mediboard has ${sb.patient_hospital_number} but this device has ${localPatient.hospitalNumber} — keeping the local admission`,
+          );
+        }
       }
       nextBeds.push(bed);
     } else {
