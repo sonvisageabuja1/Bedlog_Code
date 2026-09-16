@@ -17,7 +17,10 @@ export function backupState(
   fetch(BACKUP_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ config, beds, patients }),
+    // snapshotAt lets the service ignore a snapshot that arrives after a
+    // newer one (posts overlap: one admission changes beds and patients in
+    // two separate updates).
+    body: JSON.stringify({ config, beds, patients, snapshotAt: Date.now() }),
   }).catch(() => {
     // Silent — best-effort local backup, never surfaced to kiosk staff.
   });

@@ -15,6 +15,10 @@ CREATE TABLE IF NOT EXISTS device_config (
   device_label  TEXT,
   sync_endpoint TEXT,
   sync_enabled  BOOLEAN NOT NULL DEFAULT FALSE,
+  -- When the kiosk took the snapshot currently stored (its own clock). A
+  -- snapshot older than this is ignored, so two overlapping posts can never
+  -- leave the OLDER state as the backup.
+  snapshot_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -23,8 +27,10 @@ CREATE TABLE IF NOT EXISTS wards (
   device_id  TEXT NOT NULL REFERENCES device_config(device_id) ON DELETE CASCADE,
   name       TEXT NOT NULL,
   code       TEXT NOT NULL,
-  bed_count  INTEGER NOT NULL,
-  floor      TEXT NOT NULL
+  -- Declared capacity from Mediboards (types.ts Ward.capacity). Not the
+  -- number of beds; the beds table is the source of truth for that.
+  capacity   INTEGER NOT NULL DEFAULT 0,
+  floor      TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_wards_device ON wards(device_id);
 
@@ -51,9 +57,15 @@ CREATE TABLE IF NOT EXISTS patients (
   device_id       TEXT NOT NULL REFERENCES device_config(device_id) ON DELETE CASCADE,
   hospital_number TEXT NOT NULL,
   admitted_at     TIMESTAMPTZ NOT NULL,
-  bed_id          TEXT NOT NULL,
+  -- NULL while the patient is awaiting a bed: admitted to this ward from
+  -- app-client without one, to be assigned by a nurse on the device.
+  bed_id          TEXT,
   ward_id         TEXT NOT NULL,
   status          TEXT NOT NULL CHECK (status IN ('admitted','discharged')),
+  -- Mediboard's admissions row id for records adopted from a sync reply,
+  -- and the patient's name from Mediboards; both optional.
+  server_admission_id TEXT,
+  name            TEXT,
   discharge_type  TEXT CHECK (discharge_type IN ('discharged','deceased','lama','absconded','transferred')),
   discharged_at   TIMESTAMPTZ
 );
@@ -73,3 +85,28 @@ CREATE TABLE IF NOT EXISTS backup_log (
   error     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_backup_log_device ON backup_log(device_id, at DESC);
+
+-- ---------------------------------------------------------------------------
+-- Upgrade for a database created from an earlier version of this file.
+-- Safe to re-run; every statement is a no-op once applied.
+-- ---------------------------------------------------------------------------
+-- 2026-09-16: awaiting-bed admissions (bed_id may be NULL) and the fields
+-- that travel with them.
+ALTER TABLE patients ALTER COLUMN bed_id DROP NOT NULL;
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS server_admission_id TEXT;
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS name TEXT;
+-- 2026-09-16: wards.bed_count was renamed to capacity when the app stopped
+-- deriving beds from a count (Ward.capacity in types.ts).
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'wards' AND column_name = 'bed_count')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'wards' AND column_name = 'capacity') THEN
+    ALTER TABLE wards RENAME COLUMN bed_count TO capacity;
+  END IF;
+END $$;
+ALTER TABLE wards ALTER COLUMN capacity SET DEFAULT 0;
+ALTER TABLE wards ALTER COLUMN floor SET DEFAULT '';
+-- 2026-09-16: stale-snapshot guard.
+ALTER TABLE device_config ADD COLUMN IF NOT EXISTS snapshot_at TIMESTAMPTZ NOT NULL DEFAULT now();

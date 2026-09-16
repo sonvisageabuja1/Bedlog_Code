@@ -18,6 +18,7 @@ import { DISCHARGE_TTL } from "./constants";
 import { ls } from "./lib/storage";
 import { backupState } from "./lib/dbBackup";
 import { uid } from "./lib/id";
+import { isAwaitingBed, awaitingBedPatients } from "./lib/patients";
 import { KbContext } from "./lib/kbContext";
 import {
   getOrCreateDeviceId,
@@ -38,6 +39,7 @@ import {
 } from "./lib/mediboard";
 import { DashboardNavIcon } from "./components/icons/DashboardNavIcon";
 import { BedMapsNavIcon } from "./components/icons/BedMapsNavIcon";
+import { AdmissionsNavIcon } from "./components/icons/AdmissionsNavIcon";
 import { VirtualKeyboard } from "./components/VirtualKeyboard";
 import { TopBar } from "./components/TopBar";
 import { PinModal } from "./components/PinModal";
@@ -230,9 +232,49 @@ export default function App() {
   }, []);
 
   // Actions
+  // Completes an admission that was opened from app-client without a bed:
+  // the patient record gets the bed, the bed becomes occupied. Bumping the
+  // bed's updatedAt is what makes the change-triggered sync push it, and
+  // the server then completes its own open admission rather than opening a
+  // second one. Works offline like every other ward action.
+  const handleAssignBed = useCallback(
+    (
+      patientId: string,
+      bedId: string,
+    ): { ok: boolean; error?: string } => {
+      const patient = patients.find((p) => p.id === patientId);
+      if (!patient || !isAwaitingBed(patient)) {
+        return { ok: false, error: "This patient is not awaiting a bed" };
+      }
+      const target = beds.find((b) => b.id === bedId);
+      if (!target || target.status !== "available") {
+        return { ok: false, error: "That bed is not available" };
+      }
+      const now = Date.now();
+      setBeds((prev) => {
+        const bed = prev.find((b) => b.id === bedId);
+        if (!bed || bed.status !== "available") return prev;
+        setPatients((ps) =>
+          ps.map((p) =>
+            p.id === patientId ? { ...p, bedId, wardId: bed.wardId } : p,
+          ),
+        );
+        return prev.map((b) =>
+          b.id === bedId
+            ? { ...b, status: "occupied", patientId, updatedAt: now }
+            : b,
+        );
+      });
+      return { ok: true };
+    },
+    [beds, patients],
+  );
+
   // One open admission per hospital number per ward — the same rule the
   // server enforces. Without it a second admit for the same patient pushes
   // as a "move" and the server and device disagree about which bed is real.
+  // A patient AWAITING A BED with this hospital number is not a duplicate:
+  // admitting them to a bed simply completes that admission.
   const handleAdmit = useCallback(
     (
       hospitalNumber: string,
@@ -244,6 +286,9 @@ export default function App() {
           p.status === "admitted" &&
           p.hospitalNumber.trim().toLowerCase() === hn.toLowerCase(),
       );
+      if (already && isAwaitingBed(already)) {
+        return handleAssignBed(already.id, bedId);
+      }
       if (already) {
         const where = beds.find((b) => b.id === already.bedId);
         return {
@@ -283,7 +328,7 @@ export default function App() {
       });
       return { ok: true };
     },
-    [beds, patients],
+    [beds, patients, handleAssignBed],
   );
 
   const handleDischarge = useCallback(
@@ -671,6 +716,7 @@ export default function App() {
                     patients={patients}
                     wards={config.wards}
                     onAdmit={handleAdmit}
+                    onAssignBed={handleAssignBed}
                     onDischarge={handleDischarge}
                     onNavigate={setPage}
                   />
@@ -681,6 +727,7 @@ export default function App() {
                     patients={patients}
                     wards={config.wards}
                     onAdmit={handleAdmit}
+                    onAssignBed={handleAssignBed}
                     onDischarge={handleDischarge}
                     onStatusChange={handleStatusChange}
                     onTransfer={handleTransfer}
@@ -691,6 +738,7 @@ export default function App() {
                     beds={beds}
                     patients={patients}
                     wards={config.wards}
+                    onAssignBed={handleAssignBed}
                     onDischarge={handleDischarge}
                   />
                 )}
@@ -726,7 +774,7 @@ export default function App() {
                 )}
               </main>
 
-              {/* Bottom Navigation — Frame6: bg-[#fbf9f9], gap-[4px], px-[20px] py-[10px], exactly 2 buttons */}
+              {/* Bottom Navigation — Frame6: bg-[#fbf9f9], gap-[4px], px-[20px] py-[10px]. Three tabs: Dashboard, Admissions, Bed Map */}
               <nav className="flex-shrink-0 bg-[#fbf9f9] flex gap-[4px] items-center px-[20px] py-[10px] border-t border-black/10">
                 {/* Dashboard — ButtonMargin: flex-[1_0_0], h-[64px], bg-[#3469b2] when active */}
                 <div className="flex-[1_0_0] flex flex-col items-center justify-center h-[64px]">
@@ -761,7 +809,54 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Bed Maps — ButtonMargin1: flex-[1_0_0], h-[60px], bg-[rgba(52,105,178,0.05)] when inactive */}
+                {/* Admissions — same button as the others. An amber dot sits as
+                    a superscript on the label while any patient admitted to
+                    this ward from Mediboards is still waiting for a bed, so
+                    the nurses see there is work here without opening it. */}
+                <div className="flex-[1_0_0] flex flex-col items-center justify-center h-[60px]">
+                  <button
+                    onClick={() => setPage("admissions")}
+                    className="w-full h-full rounded-[10px] flex flex-row items-center justify-center gap-[24px] transition-colors active:opacity-90"
+                    style={{
+                      backgroundColor:
+                        page === "admissions"
+                          ? "#3469b2"
+                          : "rgba(52,105,178,0.05)",
+                    }}
+                  >
+                    <AdmissionsNavIcon
+                      color={
+                        page === "admissions" ? "white" : "#64748B"
+                      }
+                    />
+                    <span
+                      className="relative font-semibold leading-[20px] text-[20px] whitespace-nowrap"
+                      style={{
+                        color:
+                          page === "admissions"
+                            ? "white"
+                            : "#64748b",
+                      }}
+                    >
+                      Admissions
+                      {awaitingBedPatients(patients).length > 0 && (
+                        <span
+                          aria-label="Patients awaiting a bed"
+                          className="absolute -top-[4px] -right-[12px] w-[9px] h-[9px] rounded-full"
+                          style={{
+                            backgroundColor: "#f59e0b",
+                            boxShadow:
+                              page === "admissions"
+                                ? "0 0 0 2px #3469b2"
+                                : "0 0 0 2px #fbf9f9",
+                          }}
+                        />
+                      )}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Bed Map — ButtonMargin1: flex-[1_0_0], h-[60px], bg-[rgba(52,105,178,0.05)] when inactive */}
                 <div className="flex-[1_0_0] flex flex-col items-center justify-center h-[60px]">
                   <button
                     onClick={() => setPage("bedmaps")}
@@ -787,7 +882,7 @@ export default function App() {
                             : "#64748b",
                       }}
                     >
-                      Bed Maps
+                      Bed Map
                     </span>
                   </button>
                 </div>

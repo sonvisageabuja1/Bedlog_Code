@@ -43,11 +43,24 @@ export interface Patient {
   id: string;
   hospitalNumber: string;
   admittedAt: number;
-  bedId: string;
+  // null while the admission is AWAITING A BED: the Focal Person admitted
+  // the patient to this ward from app-client without knowing the bed, and a
+  // nurse here completes it by assigning one (see isAwaitingBed). Every
+  // admission the device itself creates always has a bed.
+  bedId: string | null;
   wardId: string;
   status: "admitted" | "discharged";
   dischargeType?: DischargeType;
   dischargedAt?: number;
+  // Mediboard's admissions row id, set on records adopted from a sync reply
+  // (or the onboarding seed). It is how an awaiting-bed record is matched
+  // against later replies — hospital number alone is ambiguous once a
+  // patient has been admitted more than once.
+  serverAdmissionId?: string;
+  // Patient name as registered on Mediboards, when known. The device never
+  // asks for a name itself; this only exists so a nurse can recognise a
+  // patient sent from A&E in the awaiting-bed list.
+  name?: string;
 }
 export interface AppConfig {
   hospitalName: string;

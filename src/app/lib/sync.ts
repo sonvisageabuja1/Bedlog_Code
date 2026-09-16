@@ -180,12 +180,19 @@ export interface MediboardBedSnapshot {
 }
 
 export interface MediboardPatientSnapshot {
+  // Mediboard's admissions row id.
   id: string;
   hospitalNumber: string;
+  name?: string | null;
   admittedAt: number;
-  bedId: string;
-  status: string;
+  // null: admitted from app-client without a bed (awaiting a bed here).
+  bedId: string | null;
+  // The admissions row's own status word. Rows opened from the dashboard
+  // used to be written with no status at all, so null means "admitted".
+  status: string | null;
 }
+
+const rowStatus = (p: { status: string | null }) => p.status ?? "admitted";
 
 // Merges the authoritative state Mediboard returns on every sync into the
 // device's beds and patients, so what happens on the dashboard (beds added
@@ -218,6 +225,23 @@ export interface MediboardPatientSnapshot {
 //     outright, not discharged: pushing it again as an admission would make
 //     the server move the patient back and the two sides would flip-flop.
 //
+//  AWAITING-BED admissions — opened from app-client with a ward but no bed
+//  (`bedId: null` in the reply). They belong to no bed, so the bed pass
+//  never sees them; a separate pass keeps them in step:
+//   - a server one the device does not have is adopted as a local patient
+//     with no bed, keyed by Mediboard's admission id — unless a local
+//     ADMITTED patient with that hospital number already exists (the nurse
+//     admitted them straight into a bed before this reply arrived; local
+//     wins and the push completes the server's row);
+//   - a local one whose server row now carries a bed (assigned from
+//     app-client in the meantime) takes that bed here, if it is free;
+//   - a local one the server no longer lists as open (closed from
+//     app-client, or gone) is dropped — nothing happened on this device, so
+//     there is no local outcome to keep;
+//   - a local one still open with no bed on the server is left alone. If
+//     the nurse has meanwhile assigned a bed here, the record already has a
+//     bed and is pushed on this very sync.
+//
 // Returns the SAME arrays when nothing changed, so callers (and the
 // real-time sync effect keyed on `beds`/`patients`) don't churn.
 const CLOSED_OUTCOMES: readonly string[] = [
@@ -247,7 +271,7 @@ export function reconcileWithMediboard(
       (e) =>
         e.hospitalNumber === p.hospitalNumber &&
         e.bedId === p.bedId &&
-        CLOSED_OUTCOMES.includes(e.status) &&
+        CLOSED_OUTCOMES.includes(rowStatus(e)) &&
         Math.abs(e.admittedAt - p.admittedAt) < 60_000,
     );
 
@@ -260,7 +284,7 @@ export function reconcileWithMediboard(
     server.patients
       .filter(
         (p) =>
-          p.status === "admitted" &&
+          rowStatus(p) === "admitted" &&
           p.bedId === sb.id &&
           (!sb.patient_hospital_number ||
             p.hospitalNumber === sb.patient_hospital_number),
@@ -281,10 +305,12 @@ export function reconcileWithMediboard(
           const patient: Patient = {
             id: uid(),
             hospitalNumber,
+            name: adm?.name ?? undefined,
             admittedAt: adm?.admittedAt ?? now,
             bedId: sb.id,
             wardId,
             status: "admitted",
+            serverAdmissionId: adm?.id,
           };
           nextPatients.push(patient);
           patientsChanged = true;
@@ -310,7 +336,7 @@ export function reconcileWithMediboard(
           bed = { ...bed, status: "available", patientId: undefined, updatedAt: now };
         } else if (closure) {
           // Discharged from the dashboard: mirror it here.
-          const outcome = closure.status as Patient["dischargeType"];
+          const outcome = rowStatus(closure) as Patient["dischargeType"];
           nextPatients = nextPatients.map((p) =>
             p.id === localPatient.id
               ? { ...p, status: "discharged", dischargeType: outcome, dischargedAt: now }
@@ -337,10 +363,12 @@ export function reconcileWithMediboard(
           const patient: Patient = {
             id: uid(),
             hospitalNumber,
+            name: adm?.name ?? undefined,
             admittedAt: adm?.admittedAt ?? now,
             bedId: sb.id,
             wardId,
             status: "admitted",
+            serverAdmissionId: adm?.id,
           };
           nextPatients.push(patient);
           patientsChanged = true;
@@ -357,6 +385,102 @@ export function reconcileWithMediboard(
       );
       nextBeds.push(b);
     }
+  }
+
+  // ── Awaiting-bed admissions ──────────────────────────────────────────────
+  // The reply lists every admissions row and never says which are closed:
+  // the opening row of a no-bed stay keeps `status: "admitted"` after it is
+  // closed, and the outcome arrives as its own row (same hospital number and
+  // admittedAt, bedId null, a closing status). So "still open" means "no
+  // such closing row exists".
+  const hn = (s: string) => s.trim().toLowerCase();
+  const serverById = new Map(server.patients.map((p) => [p.id, p]));
+  // The outcome row carries whichever bed the stay had when it closed —
+  // none if it was still awaiting one, or the bed app-client assigned
+  // before discharging — so the bed is deliberately not part of the match.
+  const closedOnServer = (row: MediboardPatientSnapshot) =>
+    server.patients.some(
+      (e) =>
+        e.id !== row.id &&
+        hn(e.hospitalNumber) === hn(row.hospitalNumber) &&
+        CLOSED_OUTCOMES.includes(rowStatus(e)) &&
+        Math.abs(e.admittedAt - row.admittedAt) < 60_000,
+    );
+  const bedById = new Map(nextBeds.map((b) => [b.id, b]));
+
+  // Local awaiting-bed records first, so a record that is completed or
+  // dropped here is not re-adopted below.
+  for (const lp of localPatients) {
+    if (lp.status !== "admitted" || lp.bedId) continue;
+    const row = lp.serverAdmissionId
+      ? serverById.get(lp.serverAdmissionId)
+      : undefined;
+
+    if (!row || closedOnServer(row)) {
+      // Closed from app-client (with or without a bed having been assigned
+      // there first), or the admission no longer exists. Nothing was
+      // recorded on this device, so there is no outcome to show. Checked
+      // FIRST: a closed stay's opening row still carries the bed it ended
+      // in, and must never be mistaken for a fresh bed assignment.
+      nextPatients = nextPatients.filter((p) => p.id !== lp.id);
+      patientsChanged = true;
+    } else if (row.bedId) {
+      // Completed from app-client while the nurse had not yet picked a bed.
+      const bed = bedById.get(row.bedId);
+      const occupant = bed?.patientId
+        ? nextPatients.find((p) => p.id === bed.patientId)
+        : undefined;
+      if (occupant && hn(occupant.hospitalNumber) === hn(lp.hospitalNumber)) {
+        // The bed pass above already saw the bed occupied by this patient
+        // and adopted the completed admission; this record is now a
+        // duplicate of it.
+        nextPatients = nextPatients.filter((p) => p.id !== lp.id);
+        patientsChanged = true;
+      } else if (bed && bed.status === "available") {
+        const occupied: Bed = {
+          ...bed,
+          status: "occupied",
+          patientId: lp.id,
+          updatedAt: now,
+        };
+        bedById.set(bed.id, occupied);
+        nextBeds[nextBeds.indexOf(bed)] = occupied;
+        nextPatients = nextPatients.map((p) =>
+          p.id === lp.id ? { ...p, bedId: bed.id } : p,
+        );
+        patientsChanged = true;
+      } else {
+        console.warn(
+          `HN ${lp.hospitalNumber}: Mediboard assigned bed ${bed?.number ?? row.bedId} but it is not free here — still awaiting a bed on this device`,
+        );
+      }
+    }
+  }
+
+  const localAdmittedHns = new Set(
+    nextPatients.filter((p) => p.status === "admitted").map((p) => hn(p.hospitalNumber)),
+  );
+  const knownAdmissionIds = new Set(
+    nextPatients.map((p) => p.serverAdmissionId).filter(Boolean),
+  );
+  for (const row of server.patients) {
+    if (rowStatus(row) !== "admitted" || row.bedId) continue;
+    if (knownAdmissionIds.has(row.id)) continue;
+    if (closedOnServer(row)) continue;
+    if (localAdmittedHns.has(hn(row.hospitalNumber))) continue;
+    nextPatients.push({
+      id: uid(),
+      hospitalNumber: row.hospitalNumber,
+      name: row.name ?? undefined,
+      admittedAt: row.admittedAt,
+      bedId: null,
+      wardId,
+      status: "admitted",
+      serverAdmissionId: row.id,
+    });
+    localAdmittedHns.add(hn(row.hospitalNumber));
+    knownAdmissionIds.add(row.id);
+    patientsChanged = true;
   }
 
   const bedsSame =

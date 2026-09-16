@@ -139,12 +139,19 @@ export interface MediboardDeviceBed {
   updatedAt: number;
 }
 export interface MediboardDevicePatient {
+  // Mediboard's admissions row id.
   id: string;
   hospitalNumber: string;
+  // Patient name from Mediboards; absent on older API builds.
+  name?: string | null;
   admittedAt: number;
-  bedId: string;
+  // null for an admission created from app-client without a bed (the
+  // "awaiting bed" case this device completes).
+  bedId: string | null;
   wardId: string;
-  status: string;
+  // Null on rows the dashboard opened without a status word; read as
+  // "admitted".
+  status: string | null;
 }
 
 interface MediboardWardDeviceEnvelope {
@@ -274,7 +281,7 @@ export function mediboardDeviceStateToLocal(
       const currentAdmission = patients
         .filter(
           (p) =>
-            p.status === "admitted" &&
+            (p.status ?? "admitted") === "admitted" &&
             p.bedId === b.id &&
             p.hospitalNumber === b.patient_hospital_number,
         )
@@ -300,6 +307,23 @@ export function mediboardDeviceStateToLocal(
       status,
       patientId,
       updatedAt: b.updatedAt,
+    });
+  }
+
+  // Admissions opened from app-client with no bed. They belong to no bed
+  // row, so the loop above never sees them; adopt them as awaiting-bed
+  // patients keyed by Mediboard's admission id so later syncs can match.
+  for (const p of patients) {
+    if ((p.status ?? "admitted") !== "admitted" || p.bedId) continue;
+    localPatients.push({
+      id: uid(),
+      hospitalNumber: p.hospitalNumber,
+      name: p.name ?? undefined,
+      admittedAt: p.admittedAt,
+      bedId: null,
+      wardId,
+      status: "admitted",
+      serverAdmissionId: p.id,
     });
   }
 
@@ -557,7 +581,13 @@ export function buildMediboardSyncPayload(
     // The derived id is a stable suffix on the patient's own id, not
     // randomly regenerated, so repeat/idempotent syncs don't spawn a new
     // outcome record every time.
+    //
+    // A patient AWAITING A BED is not pushed at all. Mediboard created that
+    // admission and owns it until a nurse assigns a bed here; once a bed is
+    // set the record is pushed like any other admission and the server
+    // completes (never duplicates) its own open row.
     patients: patients.flatMap((p) => {
+      if (!p.bedId) return [];
       const admission = {
         id: p.id,
         hospitalNumber: p.hospitalNumber,

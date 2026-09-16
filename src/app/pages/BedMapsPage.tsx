@@ -3,6 +3,8 @@ import bedMapsPaths from "@/imports/02BedMaps-1/svg-20k9unw57a";
 import type { Bed, BedStatus, DischargeType, Patient, Ward } from "../types";
 import { BED_MAPS_STATUS, BED_MAPS_LEGEND } from "../constants";
 import { bedDisplayNumber } from "../lib/beds";
+import { awaitingBedPatients } from "../lib/patients";
+import { timeAgo } from "../lib/time";
 import { KbContext } from "../lib/kbContext";
 import { Toast } from "../components/Toast";
 import { BedMapsStatusIcon } from "../components/icons/BedMapsStatusIcon";
@@ -14,6 +16,7 @@ export function BedMapsPage({
   patients,
   wards,
   onAdmit,
+  onAssignBed,
   onDischarge,
   onStatusChange,
   onTransfer,
@@ -23,6 +26,11 @@ export function BedMapsPage({
   wards: Ward[];
   onAdmit: (
     hn: string,
+    bedId: string,
+  ) => { ok: boolean; error?: string };
+  // Completes an admission opened from app-client without a bed.
+  onAssignBed: (
+    patientId: string,
     bedId: string,
   ) => { ok: boolean; error?: string };
   onDischarge: (
@@ -92,6 +100,13 @@ export function BedMapsPage({
   const availableForTransfer = beds.filter(
     (b) => b.status === "available" && b.id !== selectedBed?.id,
   );
+  // Patients admitted to the selected bed's ward from Mediboards who still
+  // have no bed — offered in the available-bed modal as a one-tap assign.
+  const awaitingInWard = selectedBed
+    ? awaitingBedPatients(patients).filter(
+        (p) => p.wardId === selectedBed.wardId,
+      )
+    : [];
 
   const closeModal = () => {
     setSelectedBed(null);
@@ -605,6 +620,68 @@ export function BedMapsPage({
                   </span>
                 </button>
               </div>
+
+              {/* Awaiting-bed card — complete an admission opened from
+                  app-client by putting that patient in THIS bed */}
+              {awaitingInWard.length > 0 && (
+                <div className="bg-white rounded-[12px] p-[16px] flex flex-col gap-[10px]">
+                  <p
+                    className="font-semibold text-[#2b2b2b] text-[12px] leading-[26px]"
+                    style={{
+                      fontFamily:
+                        "'Plus Jakarta Sans', sans-serif",
+                    }}
+                  >
+                    Assign to a waiting patient
+                  </p>
+                  <div className="flex flex-col gap-[6px] max-h-[180px] overflow-y-auto">
+                    {awaitingInWard.map((p) => (
+                      <button
+                        key={p.id}
+                        onPointerDown={() => {
+                          const result = onAssignBed(p.id, selectedBed.id);
+                          if (!result.ok) {
+                            showToast(result.error ?? "Could not assign bed", "error");
+                            return;
+                          }
+                          showToast(
+                            `HN ${p.hospitalNumber} assigned to ${bedDisplayNumber(beds, selectedBed.id)} — admission complete`,
+                            "success",
+                          );
+                          closeModal();
+                        }}
+                        className="flex items-center justify-between gap-[8px] px-[12px] py-[8px] rounded-[8px] border active:opacity-80 text-left"
+                        style={{
+                          backgroundColor: "#fffbeb",
+                          borderColor: "#fcd34d",
+                        }}
+                      >
+                        <span className="min-w-0">
+                          <span
+                            className="block font-semibold text-[#2b2b2b] text-[13px] leading-[18px] truncate"
+                            style={{
+                              fontFamily:
+                                "'Plus Jakarta Sans', sans-serif",
+                            }}
+                          >
+                            HN {p.hospitalNumber}
+                            {p.name ? ` · ${p.name}` : ""}
+                          </span>
+                          <span className="block text-[#b45309] text-[11px] leading-[16px]">
+                            Awaiting bed · admitted {timeAgo(p.admittedAt)}
+                          </span>
+                        </span>
+                        <span
+                          className="shrink-0 font-semibold text-white text-[12px] px-[10px] py-[4px] rounded-[6px]"
+                          style={{ backgroundColor: "#d97706" }}
+                        >
+                          Assign
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Set status card — white, rounded-[12px] */}
               <div className="bg-white rounded-[12px] px-[16px] py-[8px] flex flex-col gap-[16px]">

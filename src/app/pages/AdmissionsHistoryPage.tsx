@@ -25,7 +25,9 @@ export function AdmissionsHistoryPage({
     (a, b) => b.admittedAt - a.admittedAt,
   );
 
-  const getBed = (id: string) => beds.find((b) => b.id === id);
+  // Patients admitted from app-client without a bed have no bed id yet.
+  const getBed = (id: string | null) =>
+    id ? beds.find((b) => b.id === id) : undefined;
   const getWard = (id: string) =>
     wards.find((w) => w.id === id);
 

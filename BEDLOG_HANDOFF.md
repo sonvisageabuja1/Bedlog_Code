@@ -365,6 +365,20 @@ Tested locally end-to-end before handoff (not just written): installed Postgres,
 
 **Not yet deployed to the Pi.** Code is written and locally verified only. To deploy: install PostgreSQL on the Pi, create a `bedlog` database/user, load `schema.sql`, `rsync` the `db-backend/` directory over, `npm install` there, and add a `bedlog-db.service` systemd unit (same pattern as `bedlog-server`/`bedlog-kiosk`/`bedlog-esp-bridge`) with `PGHOST`/`PGUSER`/`PGPASSWORD`/`PGDATABASE` set as environment variables. Then redeploy the frontend build so the new backup call ships. Exact commands were given in-session; not yet copied into the Kiosk Deploy Runbook artifact as of this writing.
 
+### 9.5 Changes on 2026-09-16 (re-verified against Postgres 16)
+
+Found while adding awaiting-bed admissions, and fixed:
+
+- **Every backup for an onboarded device had been failing since 2026-09-14.** `Ward.bedCount` was renamed to `Ward.capacity` in `types.ts` that day, but `server.cjs` still inserted `w.bedCount` into a NOT NULL `bed_count` column. The column is now `capacity` (with a default) and the insert reads `capacity`, falling back to `bedCount` for a pre-rename localStorage.
+- **`patients.bed_id` is nullable**, because a patient admitted from app-client to the ward without a bed has none until a nurse assigns it. `server_admission_id` and `name` are stored alongside so the awaiting-bed record survives a restore.
+- **Overlapping snapshots are safe.** The kiosk posts on every state change, and one admission changes beds and patients in two React updates, so two snapshots can be in flight at once. Before, the second one's inserts hit duplicate keys and the newer state was lost. Now each transaction takes a per-device advisory lock, and the kiosk sends `snapshotAt` (its clock when it built the payload); a snapshot older than the one stored is skipped (`outcome: "stale"` in the response, still 200). Payloads without `snapshotAt` are stored as "now".
+- **Failures are logged.** A failed snapshot writes a `success = false` row with the error to `backup_log`, outside the rolled-back transaction. Stale skips are not logged (nothing was attempted).
+- **The service no longer dies on an idle-connection error** (`pool.on("error")`), and a request whose body is cut short no longer hangs.
+
+`schema.sql` now ends with idempotent upgrade statements, so loading it on top of a database created from the 2026-09-09 file migrates it in place; it is safe to re-run on any version. Verified locally in Docker (Postgres 16): fresh load, old-then-new upgrade, re-run, and an end-to-end script covering a snapshot with an awaiting-bed patient, read-back equality, a second snapshot replacing without duplicates, a stale snapshot being skipped, twenty concurrent posts all succeeding with the newest winning, a bad payload rejected without clobbering the last good snapshot, and both outcomes appearing in `backup_log`.
+
+Still true: the app has no restore path yet. `GET /api/backup/:deviceId` returns the snapshot in the app's own shape, so a restore is "write these three keys into localStorage", but no UI or script does that.
+
 ---
 
 ## 10. Where Deferred-Feature Design Detail Actually Lives

@@ -7,6 +7,8 @@ import type {
   Ward,
 } from "../types";
 import { bedDisplayNumber } from "../lib/beds";
+import { isAwaitingBed } from "../lib/patients";
+import { timeAgo } from "../lib/time";
 import { CircularStat } from "../components/CircularStat";
 import { Toast } from "../components/Toast";
 import { KeyboardPad } from "../components/VirtualKeyboard";
@@ -18,6 +20,7 @@ export function DashboardPage({
   patients,
   wards,
   onAdmit,
+  onAssignBed,
   onDischarge,
   onNavigate,
 }: {
@@ -26,6 +29,11 @@ export function DashboardPage({
   wards: Ward[];
   onAdmit: (
     hospitalNumber: string,
+    bedId: string,
+  ) => { ok: boolean; error?: string };
+  // Completes an admission opened from app-client without a bed.
+  onAssignBed: (
+    patientId: string,
     bedId: string,
   ) => { ok: boolean; error?: string };
   onDischarge: (
@@ -78,7 +86,13 @@ export function DashboardPage({
       )
     : null;
 
-  const isExisting = !!existingPatient;
+  // Three cases for a typed hospital number:
+  //  - awaiting a bed: admitted from app-client to this ward, no bed yet —
+  //    the bed picker completes that admission (no discharge from here);
+  //  - existing: already in a bed — bed is read-only, outcomes apply;
+  //  - new: nobody admitted under that number — a fresh admission.
+  const isAwaiting = !!existingPatient && isAwaitingBed(existingPatient);
+  const isExisting = !!existingPatient && !isAwaiting;
   const isNew = !!hnTrimmed && !existingPatient;
   const bedFieldActive = !!hnTrimmed;
 
@@ -88,7 +102,8 @@ export function DashboardPage({
     : selectedBedId;
   const selectedBed = beds.find((b) => b.id === effectiveBedId);
 
-  const canAdmit = isNew && selectedBed?.status === "available";
+  const canAdmit =
+    (isNew || isAwaiting) && selectedBed?.status === "available";
   const canDischarge = isExisting && !!existingPatient;
 
   const stats = {
@@ -107,13 +122,17 @@ export function DashboardPage({
       );
       return;
     }
-    const result = onAdmit(hnTrimmed, selectedBedId);
+    const result = isAwaiting
+      ? onAssignBed(existingPatient!.id, selectedBedId)
+      : onAdmit(hnTrimmed, selectedBedId);
     if (!result.ok) {
       showToast(result.error ?? "Could not admit", "error");
       return;
     }
     showToast(
-      `Patient ${hnTrimmed} admitted to ${bedDisplayNumber(beds, selectedBed!.id)}`,
+      isAwaiting
+        ? `Patient ${hnTrimmed} assigned to ${bedDisplayNumber(beds, selectedBed!.id)} — admission complete`
+        : `Patient ${hnTrimmed} admitted to ${bedDisplayNumber(beds, selectedBed!.id)}`,
       "success",
     );
     setHospitalNumber("");
@@ -130,7 +149,8 @@ export function DashboardPage({
     }
     onDischarge(
       existingPatient!.id,
-      existingPatient!.bedId,
+      // canDischarge guarantees an in-bed patient, never an awaiting one.
+      existingPatient!.bedId!,
       type,
     );
     const labels: Record<DischargeType, string> = {
@@ -191,7 +211,22 @@ export function DashboardPage({
             >
               {hospitalNumber || "e.g. 10003"}
             </span>
+            {isAwaiting && (
+              <span
+                className="ml-auto shrink-0 text-[12px] font-semibold px-[8px] py-[2px] rounded-full"
+                style={{ backgroundColor: "#fef3c7", color: "#b45309" }}
+              >
+                Awaiting bed
+              </span>
+            )}
           </button>
+          {isAwaiting && (
+            <p className="shrink-0 text-[12px] leading-[16px] text-[#b45309] font-medium">
+              {existingPatient!.name ? `${existingPatient!.name} · ` : ""}
+              admitted from Mediboards {timeAgo(existingPatient!.admittedAt)}{" "}
+              without a bed — pick a bed below to complete the admission.
+            </p>
+          )}
         </div>
 
         {/* Bed Number */}
@@ -302,7 +337,7 @@ export function DashboardPage({
             }}
           >
             <span className="font-semibold leading-[20px] text-white text-[16px]">
-              Admit
+              {isAwaiting ? "Assign bed" : "Admit"}
             </span>
           </button>
           {/* Discharge/status — only relevant for existing patients */}
