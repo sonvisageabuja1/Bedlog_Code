@@ -154,7 +154,7 @@ export function DashboardPage({
       type,
     );
     const labels: Record<DischargeType, string> = {
-      discharged: "Discharged Patient",
+      discharged: "Discharged",
       deceased: "Marked Deceased",
       lama: "LAMA recorded",
       absconded: "Absconded recorded",
@@ -232,7 +232,7 @@ export function DashboardPage({
         {/* Bed Number */}
         <div className="flex flex-col gap-[8px] flex-1 min-h-0">
           <p className="font-semibold leading-[26px] text-[#0a276a] text-[24px] tracking-[0.3px] uppercase flex items-center gap-2 shrink-0">
-            Bed Number
+            Bed Number1
             {isExisting && selectedBed && (
               <span className="font-normal text-[#00bd6d] normal-case tracking-normal text-[12px]">
                 — auto-filled
