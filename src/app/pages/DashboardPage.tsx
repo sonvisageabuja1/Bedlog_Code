@@ -154,7 +154,7 @@ export function DashboardPage({
       type,
     );
     const labels: Record<DischargeType, string> = {
-      discharged: "Discharged",
+      discharged: "Discharged Patient",
       deceased: "Marked Deceased",
       lama: "LAMA recorded",
       absconded: "Absconded recorded",
