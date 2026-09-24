@@ -18,7 +18,7 @@ import { DISCHARGE_TTL } from "./constants";
 import { ls } from "./lib/storage";
 import { backupState } from "./lib/dbBackup";
 import { uid } from "./lib/id";
-import { isAwaitingBed, awaitingBedPatients } from "./lib/patients";
+import { isAwaitingBed } from "./lib/patients";
 import { KbContext } from "./lib/kbContext";
 import {
   getOrCreateDeviceId,
@@ -39,7 +39,6 @@ import {
 } from "./lib/mediboard";
 import { DashboardNavIcon } from "./components/icons/DashboardNavIcon";
 import { BedMapsNavIcon } from "./components/icons/BedMapsNavIcon";
-import { AdmissionsNavIcon } from "./components/icons/AdmissionsNavIcon";
 import { VirtualKeyboard } from "./components/VirtualKeyboard";
 import { TopBar } from "./components/TopBar";
 import { PinModal } from "./components/PinModal";
@@ -48,7 +47,6 @@ import { NeedsSetupScreen } from "./components/NeedsSetupScreen";
 import { OnboardingScreen } from "./components/OnboardingScreen";
 import { DashboardPage } from "./pages/DashboardPage";
 import { BedMapsPage } from "./pages/BedMapsPage";
-import { AdmissionsPage } from "./pages/AdmissionsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { AdmissionsHistoryPage } from "./pages/AdmissionsHistoryPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -733,15 +731,6 @@ export default function App() {
                     onTransfer={handleTransfer}
                   />
                 )}
-                {page === "admissions" && (
-                  <AdmissionsPage
-                    beds={beds}
-                    patients={patients}
-                    wards={config.wards}
-                    onAssignBed={handleAssignBed}
-                    onDischarge={handleDischarge}
-                  />
-                )}
                 {page === "reports" && (
                   <ReportsPage
                     beds={beds}
@@ -774,7 +763,7 @@ export default function App() {
                 )}
               </main>
 
-              {/* Bottom Navigation — Frame6: bg-[#fbf9f9], gap-[4px], px-[20px] py-[10px]. Three tabs: Dashboard, Admissions, Bed Map */}
+              {/* Bottom Navigation — Frame6: bg-[#fbf9f9], gap-[4px], px-[20px] py-[10px]. Two tabs: Dashboard, Bed Map */}
               <nav className="flex-shrink-0 bg-[#fbf9f9] flex gap-[4px] items-center px-[20px] py-[10px] border-t border-black/10">
                 {/* Dashboard — ButtonMargin: flex-[1_0_0], h-[64px], bg-[#3469b2] when active */}
                 <div className="flex-[1_0_0] flex flex-col items-center justify-center h-[64px]">
@@ -805,53 +794,6 @@ export default function App() {
                       }}
                     >
                       Dashboard
-                    </span>
-                  </button>
-                </div>
-
-                {/* Admissions — same button as the others. An amber dot sits as
-                    a superscript on the label while any patient admitted to
-                    this ward from Mediboards is still waiting for a bed, so
-                    the nurses see there is work here without opening it. */}
-                <div className="flex-[1_0_0] flex flex-col items-center justify-center h-[60px]">
-                  <button
-                    onClick={() => setPage("admissions")}
-                    className="w-full h-full rounded-[10px] flex flex-row items-center justify-center gap-[24px] transition-colors active:opacity-90"
-                    style={{
-                      backgroundColor:
-                        page === "admissions"
-                          ? "#3469b2"
-                          : "rgba(52,105,178,0.05)",
-                    }}
-                  >
-                    <AdmissionsNavIcon
-                      color={
-                        page === "admissions" ? "white" : "#64748B"
-                      }
-                    />
-                    <span
-                      className="relative font-semibold leading-[20px] text-[20px] whitespace-nowrap"
-                      style={{
-                        color:
-                          page === "admissions"
-                            ? "white"
-                            : "#64748b",
-                      }}
-                    >
-                      Admissions
-                      {awaitingBedPatients(patients).length > 0 && (
-                        <span
-                          aria-label="Patients awaiting a bed"
-                          className="absolute -top-[4px] -right-[12px] w-[9px] h-[9px] rounded-full"
-                          style={{
-                            backgroundColor: "#f59e0b",
-                            boxShadow:
-                              page === "admissions"
-                                ? "0 0 0 2px #3469b2"
-                                : "0 0 0 2px #fbf9f9",
-                          }}
-                        />
-                      )}
                     </span>
                   </button>
                 </div>

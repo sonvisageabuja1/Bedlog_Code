@@ -11,7 +11,6 @@ export type BedStatus =
 export type Page =
   | "dashboard"
   | "bedmaps"
-  | "admissions"
   | "reports"
   | "admissions-history"
   | "settings";
