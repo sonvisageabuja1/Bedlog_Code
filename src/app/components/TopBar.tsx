@@ -121,7 +121,10 @@ export function TopBar({
       <div className="flex-1 flex items-center justify-between overflow-hidden">
         <MediboardsLogo />
         <div className="flex items-center gap-4 shrink-0">
-          <SyncIndicator sync={sync} />
+          {/* Sync status ("Synced · x min ago · Online") hidden for now.
+              Re-enable by uncommenting; the component and the `sync` prop
+              are kept wired up so nothing else needs to change. */}
+          {/* <SyncIndicator sync={sync} /> */}
           <LiveClock />
         </div>
       </div>

@@ -177,11 +177,6 @@ export function DashboardPage({
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-[clamp(8px,1.6vh,16px)] px-5 pt-[clamp(6px,1.2vh,10px)] pb-[clamp(6px,1.2vh,14px)] overflow-y-auto">
-      {/* "Quick Admission" title — matches design's absolute label */}
-      <p className="font-semibold leading-[24px] text-[#0f172a] text-[16px] shrink-0">
-        Quick Admission
-      </p>
-
       {/* Toast */}
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
@@ -330,66 +325,66 @@ export function DashboardPage({
           {/* Admit — only relevant for new patients */}
           <button
             onClick={handleAdmit}
-            className="flex-1 min-w-[100px] min-h-[44px] max-h-[88px] rounded-[10px] flex items-center justify-center active:scale-95 transition-all"
+            className="flex-1 min-w-[100px] min-h-[56px] max-h-[110px] rounded-[10px] flex items-center justify-center active:scale-95 transition-all"
             style={{
               backgroundColor: "#156f48",
               opacity: canAdmit ? 1 : 0.35,
             }}
           >
-            <span className="font-semibold leading-[20px] text-white text-[16px]">
+            <span className="font-semibold leading-[30px] text-white text-[24px]">
               {isAwaiting ? "Assign bed" : "Admit"}
             </span>
           </button>
           {/* Discharge/status — only relevant for existing patients */}
           <button
             onClick={() => handleAction("discharged")}
-            className="flex-1 min-w-[100px] min-h-[44px] max-h-[88px] rounded-[10px] flex items-center justify-center active:scale-95 transition-all"
+            className="flex-1 min-w-[100px] min-h-[56px] max-h-[110px] rounded-[10px] flex items-center justify-center active:scale-95 transition-all"
             style={{
               backgroundColor: "#2138bc",
               opacity: canDischarge ? 1 : 0.35,
               border: "0.726px solid rgba(0,0,0,0.1)",
             }}
           >
-            <span className="font-semibold leading-[20px] text-white text-[16px]">
+            <span className="font-semibold leading-[30px] text-white text-[24px]">
               Discharge
             </span>
           </button>
           <button
             onClick={() => handleAction("deceased")}
-            className="flex-1 min-w-[100px] min-h-[44px] max-h-[88px] rounded-[10px] flex items-center justify-center active:scale-95 transition-all"
+            className="flex-1 min-w-[100px] min-h-[56px] max-h-[110px] rounded-[10px] flex items-center justify-center active:scale-95 transition-all"
             style={{
               backgroundColor: "#dd2237",
               opacity: canDischarge ? 1 : 0.35,
               border: "0.726px solid #dd2237",
             }}
           >
-            <span className="font-semibold leading-[20px] text-white text-[16px]">
+            <span className="font-semibold leading-[30px] text-white text-[24px]">
               Deceased
             </span>
           </button>
           <button
             onClick={() => handleAction("lama")}
-            className="flex-1 min-w-[100px] min-h-[44px] max-h-[88px] rounded-[10px] flex items-center justify-center active:scale-95 transition-all"
+            className="flex-1 min-w-[100px] min-h-[56px] max-h-[110px] rounded-[10px] flex items-center justify-center active:scale-95 transition-all"
             style={{
               backgroundColor: "#ff662f",
               opacity: canDischarge ? 1 : 0.35,
               border: "0.726px solid #ff662f",
             }}
           >
-            <span className="font-semibold leading-[20px] text-white text-[16px]">
+            <span className="font-semibold leading-[30px] text-white text-[24px]">
               LAMA
             </span>
           </button>
           <button
             onClick={() => handleAction("absconded")}
-            className="flex-1 min-w-[100px] min-h-[44px] max-h-[88px] rounded-[10px] flex items-center justify-center active:scale-95 transition-all"
+            className="flex-1 min-w-[100px] min-h-[56px] max-h-[110px] rounded-[10px] flex items-center justify-center active:scale-95 transition-all"
             style={{
               backgroundColor: "rgba(0,0,0,0.4)",
               opacity: canDischarge ? 1 : 0.35,
               border: "0.726px solid #8d9094",
             }}
           >
-            <span className="font-semibold leading-[20px] text-white text-[16px]">
+            <span className="font-semibold leading-[30px] text-white text-[24px]">
               Absconded
             </span>
           </button>
@@ -397,13 +392,13 @@ export function DashboardPage({
       </div>
 
       {/* Admitting Capacity Row — responsive: wraps instead of overlapping on narrow/short kiosk screens */}
-      <div className="shrink-0 bg-[rgba(52,105,178,0.05)] rounded-[10.221px] border border-black/10 px-[clamp(14px,2vw,20px)] py-[clamp(8px,1.5vh,14px)] flex flex-wrap items-center gap-x-3 gap-y-2">
+      <div className="shrink-0 bg-[rgba(52,105,178,0.05)] rounded-[10.221px] border border-black/10 px-[clamp(14px,2vw,20px)] py-[clamp(8px,1.5vh,14px)] flex flex-wrap items-center gap-x-2.5 gap-y-2">
         {/* "Admitting Capacity" label — two lines, bold */}
         <div className="shrink-0">
-          <p className="font-semibold text-[#0f172a] text-[12px] leading-[16px]">
+          <p className="font-bold text-[#0f172a] text-[18px] leading-[24px]">
             Admitting
           </p>
-          <p className="font-semibold text-[#0f172a] text-[12px] leading-[16px]">
+          <p className="font-bold text-[#0f172a] text-[18px] leading-[24px]">
             Capacity
           </p>
         </div>
@@ -412,9 +407,9 @@ export function DashboardPage({
         <div className="bg-white w-px self-stretch rounded-full shrink-0 hidden sm:block" />
 
         {/* Total Beds */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
           <p
-            className="text-[#2b2b2b] text-[12px] font-semibold whitespace-nowrap"
+            className="text-[#2b2b2b] text-[18px] font-semibold whitespace-nowrap"
             style={{
               fontFamily: "'Plus Jakarta Sans', sans-serif",
             }}
@@ -426,7 +421,7 @@ export function DashboardPage({
             total={stats.total}
             ringColor="#6969D3"
             isFull
-            size={52}
+            size={64}
           />
         </div>
 
@@ -434,9 +429,9 @@ export function DashboardPage({
         <div className="bg-white w-px self-stretch rounded-full shrink-0 hidden sm:block" />
 
         {/* Occupied Beds */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
           <p
-            className="text-[#2b2b2b] text-[12px] font-semibold whitespace-nowrap"
+            className="text-[#2b2b2b] text-[18px] font-semibold whitespace-nowrap"
             style={{
               fontFamily: "'Plus Jakarta Sans', sans-serif",
             }}
@@ -447,7 +442,7 @@ export function DashboardPage({
             value={stats.occupied}
             total={stats.total}
             ringColor="#FF7F0B"
-            size={52}
+            size={64}
           />
         </div>
 
@@ -455,9 +450,9 @@ export function DashboardPage({
         <div className="bg-white w-px self-stretch rounded-full shrink-0 hidden sm:block" />
 
         {/* Available Beds */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
           <p
-            className="text-[#2b2b2b] text-[12px] font-semibold whitespace-nowrap"
+            className="text-[#2b2b2b] text-[18px] font-semibold whitespace-nowrap"
             style={{
               fontFamily: "'Plus Jakarta Sans', sans-serif",
             }}
@@ -468,17 +463,17 @@ export function DashboardPage({
             value={stats.available}
             total={stats.total}
             ringColor="#2E7D32"
-            size={52}
+            size={64}
           />
         </div>
 
         {/* Reports button — white bg, blue border, blue text. flex-grow on wide screens, full-width on its own line if wrapped */}
         <button
           onClick={() => onNavigate("reports")}
-          className="shrink-0 ml-auto bg-white border border-[#3469b2] rounded-[10px] px-[13px] py-[10px] flex items-center justify-center active:opacity-80 transition-opacity"
-          style={{ minWidth: "84px" }}
+          className="shrink-0 ml-auto bg-white border border-[#3469b2] rounded-[10px] px-[24px] py-[14px] flex items-center justify-center active:opacity-80 transition-opacity"
+          style={{ minWidth: "120px" }}
         >
-          <span className="font-medium leading-[18px] text-[#3469b2] text-[13px] whitespace-nowrap">
+          <span className="font-semibold leading-[26px] text-[#3469b2] text-[20px] whitespace-nowrap">
             Reports
           </span>
         </button>

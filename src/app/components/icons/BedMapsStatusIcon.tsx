@@ -16,7 +16,7 @@ export function BedMapsStatusIcon({
         src={src}
         alt={BED_MAPS_STATUS[status].label}
         draggable={false}
-        style={{ width: "62px", height: "auto", display: "block" }}
+        style={{ width: "82px", height: "auto", display: "block" }}
       />
     );
   }

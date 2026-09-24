@@ -3,8 +3,8 @@ import bedMapsPaths from "@/imports/02BedMaps-1/svg-20k9unw57a";
 export function BedMapsBedIcon({ color }: { color: string }) {
   return (
     <svg
-      width="39"
-      height="24.267"
+      width="52"
+      height="32.356"
       fill="none"
       viewBox="0 0 39.0004 24.2671"
       style={{ display: "block" }}
