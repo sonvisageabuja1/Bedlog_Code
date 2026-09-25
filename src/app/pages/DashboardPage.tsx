@@ -202,7 +202,7 @@ export function DashboardPage({
             className="bg-white flex-1 min-h-[44px] max-h-[88px] rounded-[10px] relative overflow-hidden border-2 border-[#3469b2] flex items-center px-[14px]"
           >
             <span
-              className={`text-[14px] font-medium ${hospitalNumber ? "text-[#0f172a]" : "text-[rgba(15,23,42,0.5)]"}`}
+              className={`text-[18px] font-medium ${hospitalNumber ? "text-[#0f172a]" : "text-[rgba(15,23,42,0.5)]"}`}
             >
               {hospitalNumber || "e.g. 10003"}
             </span>
@@ -238,7 +238,7 @@ export function DashboardPage({
           {/* Existing patient: read-only populated field */}
           {isExisting ? (
             <div className="bg-white flex-1 min-h-[44px] max-h-[88px] rounded-[10px] border-2 border-[#3469b2] px-[14px] flex items-center gap-[10px]">
-              <p className="text-[14px] font-semibold text-[#0f172a] flex-1">
+              <p className="text-[18px] font-semibold text-[#0f172a] flex-1">
                 {selectedBed
                   ? bedDisplayNumber(beds, selectedBed.id)
                   : "—"}
@@ -266,7 +266,7 @@ export function DashboardPage({
                   setSelectedBedId(e.target.value)
                 }
                 disabled={!bedFieldActive}
-                className="absolute inset-0 w-full h-full bg-transparent px-[12px] pr-[40px] text-[14px] font-medium appearance-none focus:outline-none cursor-pointer disabled:cursor-not-allowed"
+                className="absolute inset-0 w-full h-full bg-transparent px-[12px] pr-[40px] text-[18px] font-medium appearance-none focus:outline-none cursor-pointer disabled:cursor-not-allowed"
                 style={{
                   color: selectedBedId
                     ? "#0f172a"
@@ -395,10 +395,10 @@ export function DashboardPage({
       <div className="shrink-0 bg-[rgba(52,105,178,0.05)] rounded-[10.221px] border border-black/10 px-[clamp(14px,2vw,20px)] py-[clamp(8px,1.5vh,14px)] flex flex-wrap items-center gap-x-2.5 gap-y-2">
         {/* "Admitting Capacity" label — two lines, bold */}
         <div className="shrink-0">
-          <p className="font-bold text-[#0f172a] text-[18px] leading-[24px]">
+          <p className="font-bold text-[#0f172a] text-[22px] leading-[28px]">
             Admitting
           </p>
-          <p className="font-bold text-[#0f172a] text-[18px] leading-[24px]">
+          <p className="font-bold text-[#0f172a] text-[22px] leading-[28px]">
             Capacity
           </p>
         </div>
@@ -409,7 +409,7 @@ export function DashboardPage({
         {/* Total Beds */}
         <div className="flex items-center gap-3 shrink-0">
           <p
-            className="text-[#2b2b2b] text-[18px] font-semibold whitespace-nowrap"
+            className="text-[#2b2b2b] text-[22px] font-semibold whitespace-nowrap"
             style={{
               fontFamily: "'Plus Jakarta Sans', sans-serif",
             }}
@@ -422,6 +422,7 @@ export function DashboardPage({
             ringColor="#6969D3"
             isFull
             size={64}
+            valueFontSize={23}
           />
         </div>
 
@@ -431,7 +432,7 @@ export function DashboardPage({
         {/* Occupied Beds */}
         <div className="flex items-center gap-3 shrink-0">
           <p
-            className="text-[#2b2b2b] text-[18px] font-semibold whitespace-nowrap"
+            className="text-[#2b2b2b] text-[22px] font-semibold whitespace-nowrap"
             style={{
               fontFamily: "'Plus Jakarta Sans', sans-serif",
             }}
@@ -443,6 +444,7 @@ export function DashboardPage({
             total={stats.total}
             ringColor="#FF7F0B"
             size={64}
+            valueFontSize={23}
           />
         </div>
 
@@ -452,7 +454,7 @@ export function DashboardPage({
         {/* Available Beds */}
         <div className="flex items-center gap-3 shrink-0">
           <p
-            className="text-[#2b2b2b] text-[18px] font-semibold whitespace-nowrap"
+            className="text-[#2b2b2b] text-[22px] font-semibold whitespace-nowrap"
             style={{
               fontFamily: "'Plus Jakarta Sans', sans-serif",
             }}
@@ -464,6 +466,7 @@ export function DashboardPage({
             total={stats.total}
             ringColor="#2E7D32"
             size={64}
+            valueFontSize={23}
           />
         </div>
 
@@ -473,7 +476,7 @@ export function DashboardPage({
           className="shrink-0 ml-auto bg-white border border-[#3469b2] rounded-[10px] px-[24px] py-[14px] flex items-center justify-center active:opacity-80 transition-opacity"
           style={{ minWidth: "120px" }}
         >
-          <span className="font-semibold leading-[26px] text-[#3469b2] text-[20px] whitespace-nowrap">
+          <span className="font-semibold leading-[28px] text-[#3469b2] text-[22px] whitespace-nowrap">
             Reports
           </span>
         </button>

@@ -37,7 +37,7 @@ export function LiveClock() {
     minute: "2-digit",
   });
   return (
-    <div className="flex items-center gap-2 font-semibold text-[#011a57] text-[14px] leading-[24px] shrink-0">
+    <div className="flex items-center gap-2 font-semibold text-[#011a57] text-[18px] leading-[28px] shrink-0">
       <span>{d}</span>
       <span>{t}</span>
     </div>

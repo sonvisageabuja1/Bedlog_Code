@@ -6,12 +6,15 @@ export function CircularStat({
   ringColor,
   isFull = false,
   size = 79.577,
+  valueFontSize,
 }: {
   value: number;
   total: number;
   ringColor: string;
   isFull?: boolean;
   size?: number;
+  /** Override the auto-scaled value font size (px). */
+  valueFontSize?: number;
 }) {
   const bgVB = 75.3007;
   const prVB = 73.1105;
@@ -24,7 +27,8 @@ export function CircularStat({
       ? Math.min(value / total, 1)
       : 0;
   const dashoffset = circ * (1 - pct);
-  const fontSize = Math.round((size / 79.577) * 24);
+  const fontSize =
+    valueFontSize ?? Math.round((size / 79.577) * 24);
 
   return (
     <div

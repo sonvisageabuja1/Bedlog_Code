@@ -785,7 +785,7 @@ export default function App() {
                       }
                     />
                     <span
-                      className="font-semibold leading-[20px] text-[20px] whitespace-nowrap"
+                      className="font-semibold leading-[22px] text-[22px] whitespace-nowrap"
                       style={{
                         color:
                           page === "dashboard"
@@ -816,7 +816,7 @@ export default function App() {
                       }
                     />
                     <span
-                      className="font-semibold leading-[20px] text-[20px] whitespace-nowrap"
+                      className="font-semibold leading-[22px] text-[22px] whitespace-nowrap"
                       style={{
                         color:
                           page === "bedmaps"
