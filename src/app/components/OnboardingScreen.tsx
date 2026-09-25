@@ -386,25 +386,25 @@ export function OnboardingScreen({
       }}
     >
       {/* Header */}
-      <div className="flex-shrink-0 bg-[#3469b2] px-5 pt-6 pb-5">
-        <div className="flex items-center gap-3 mb-4">
-          <MediboardsLogo variant="light" />
+      <div className="flex-shrink-0 bg-[#3469b2] px-10 pt-12 pb-10">
+        <div className="flex items-center gap-6 mb-8">
+          <MediboardsLogo variant="light" scale={2} />
         </div>
-        <p className="text-white/70 text-[12px] font-semibold uppercase tracking-widest mb-1">
+        <p className="text-white/70 text-[24px] font-semibold uppercase tracking-widest mb-2">
           Step {step} of 2
         </p>
-        <p className="text-white font-bold text-[18px] leading-snug">
+        <p className="text-white font-bold text-[36px] leading-snug">
           {step === 1
             ? "Find your hospital"
             : "Select your department and ward"}
         </p>
-        <p className="text-white/60 text-[12px] mt-1">
+        <p className="text-white/60 text-[24px] mt-2">
           {step === 1
             ? "Search Mediboard for the hospital this device belongs to"
             : "Pick the ward this device manages"}
         </p>
         {/* Progress bar */}
-        <div className="mt-4 h-1.5 bg-white/20 rounded-full overflow-hidden">
+        <div className="mt-8 h-3 bg-white/20 rounded-full overflow-hidden">
           <div
             className="h-full bg-white rounded-full transition-all duration-500"
             style={{ width: `${progress}%` }}
@@ -413,15 +413,15 @@ export function OnboardingScreen({
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto p-5">
+      <div className="flex-1 overflow-y-auto p-10">
         {step === 1 && (
-          <div className="space-y-3 pt-2">
+          <div className="space-y-6 pt-4">
             {/* Combo dropdown — type to filter, tap to scroll/pick */}
                 <div
                   className="relative"
                   onPointerDown={(e) => e.stopPropagation()}
                 >
-                  <label className="block text-[11px] font-bold text-[#64748b] uppercase tracking-wider mb-2">
+                  <label className="block text-[22px] font-bold text-[#64748b] uppercase tracking-wider mb-4">
                     Hospital / Facility
                   </label>
                   <div className="relative">
@@ -447,7 +447,7 @@ export function OnboardingScreen({
                       disabled={
                         hospitalsLoading || !!hospitalsError
                       }
-                      className="w-full h-12 bg-[#f4f6f9] rounded-[12px] border-2 px-4 pr-11 text-[15px] font-semibold text-[#0f172a] placeholder-[rgba(15,23,42,0.35)] focus:outline-none transition-colors disabled:opacity-50"
+                      className="w-full h-24 bg-[#f4f6f9] rounded-[12px] border-2 px-8 pr-22 text-[30px] font-semibold text-[#0f172a] placeholder-[rgba(15,23,42,0.35)] focus:outline-none transition-colors disabled:opacity-50"
                       style={{
                         borderColor: errors.hospital
                           ? "#dd2237"
@@ -473,12 +473,12 @@ export function OnboardingScreen({
                       disabled={
                         hospitalsLoading || !!hospitalsError
                       }
-                      className="absolute right-0 top-0 h-12 w-11 flex items-center justify-center text-[#64748b] disabled:opacity-40"
+                      className="absolute right-0 top-0 h-24 w-22 flex items-center justify-center text-[#64748b] disabled:opacity-40"
                     >
                       {selectedHospital || hospitalQuery ? (
                         <svg
-                          width="14"
-                          height="14"
+                          width="28"
+                          height="28"
                           fill="none"
                           viewBox="0 0 14 14"
                         >
@@ -491,8 +491,8 @@ export function OnboardingScreen({
                         </svg>
                       ) : (
                         <svg
-                          width="16"
-                          height="16"
+                          width="32"
+                          height="32"
                           fill="none"
                           viewBox="0 0 16 16"
                         >
@@ -511,9 +511,9 @@ export function OnboardingScreen({
                     {hospitalDropdownOpen &&
                       !hospitalsLoading &&
                       !hospitalsError && (
-                        <div className="absolute top-[calc(100%+6px)] left-0 right-0 z-20 bg-white rounded-[12px] border border-[rgba(0,0,0,0.1)] shadow-lg max-h-64 overflow-y-auto">
+                        <div className="absolute top-[calc(100%+12px)] left-0 right-0 z-20 bg-white rounded-[12px] border border-[rgba(0,0,0,0.1)] shadow-lg max-h-128 overflow-y-auto">
                           {filteredHospitals.length === 0 ? (
-                            <p className="text-center text-[13px] text-[#94a3b8] py-6 px-3">
+                            <p className="text-center text-[26px] text-[#94a3b8] py-12 px-6">
                               No hospitals match "
                               {hospitalQuery}"
                             </p>
@@ -527,7 +527,7 @@ export function OnboardingScreen({
                                   setHospitalDropdownOpen(false);
                                   setErrors({});
                                 }}
-                                className="w-full flex items-center gap-3 text-left px-3 py-2.5 text-[14px] font-medium active:bg-[rgba(52,105,178,0.05)] border-b border-[rgba(0,0,0,0.05)] last:border-b-0"
+                                className="w-full flex items-center gap-6 text-left px-6 py-5 text-[28px] font-medium active:bg-[rgba(52,105,178,0.05)] border-b border-[rgba(0,0,0,0.05)] last:border-b-0"
                                 style={{
                                   color:
                                     selectedHospital?.id === h.id
@@ -547,26 +547,26 @@ export function OnboardingScreen({
                       )}
                   </div>
                   {errors.hospital && (
-                    <p className="text-[#dd2237] text-xs mt-1.5 font-medium">
+                    <p className="text-[#dd2237] text-xs mt-3 font-medium">
                       {errors.hospital}
                     </p>
                   )}
                 </div>
 
                 {hospitalsError && (
-                  <div className="flex flex-col gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-3">
-                    <div className="flex items-start gap-2">
+                  <div className="flex flex-col gap-4 bg-red-50 border border-red-200 rounded-xl px-6 py-6">
+                    <div className="flex items-start gap-4">
                       <AlertTriangle
-                        size={14}
-                        className="text-[#dd2237] mt-0.5 shrink-0"
+                        size={28}
+                        className="text-[#dd2237] mt-1 shrink-0"
                       />
-                      <p className="text-[11px] text-[#dd2237] leading-relaxed">
+                      <p className="text-[22px] text-[#dd2237] leading-relaxed">
                         {hospitalsError}
                       </p>
                     </div>
                     <button
                       onClick={loadHospitals}
-                      className="text-[12px] font-semibold text-[#3469b2] text-left"
+                      className="text-[24px] font-semibold text-[#3469b2] text-left"
                     >
                       Try again
                     </button>
@@ -574,7 +574,7 @@ export function OnboardingScreen({
                       onClick={() =>
                         setShowMediboardSignupModal(true)
                       }
-                      className="text-[12px] font-semibold text-[#64748b] text-left"
+                      className="text-[24px] font-semibold text-[#64748b] text-left"
                     >
                       Can't find your hospital?
                     </button>
@@ -586,7 +586,7 @@ export function OnboardingScreen({
                     onClick={() =>
                       setShowMediboardSignupModal(true)
                     }
-                    className="w-full text-center text-[12px] font-semibold text-[#64748b] pt-1"
+                    className="w-full text-center text-[24px] font-semibold text-[#64748b] pt-2"
                   >
                     Can't find your hospital?
                   </button>
@@ -595,13 +595,13 @@ export function OnboardingScreen({
         )}
 
         {step === 2 && (
-          <div className="space-y-3 pt-2">
+          <div className="space-y-6 pt-4">
             {
               <div
                 className="relative"
                 onPointerDown={(e) => e.stopPropagation()}
               >
-                <label className="block text-[11px] font-bold text-[#64748b] uppercase tracking-wider mb-2">
+                <label className="block text-[22px] font-bold text-[#64748b] uppercase tracking-wider mb-4">
                   Department
                 </label>
                 <div className="relative">
@@ -623,7 +623,7 @@ export function OnboardingScreen({
                     }
                     autoComplete="off"
                     disabled={departmentsLoading || !!departmentsError}
-                    className="w-full h-12 bg-[#f4f6f9] rounded-[12px] border-2 px-4 pr-11 text-[15px] font-semibold text-[#0f172a] placeholder-[rgba(15,23,42,0.35)] focus:outline-none transition-colors disabled:opacity-50"
+                    className="w-full h-24 bg-[#f4f6f9] rounded-[12px] border-2 px-8 pr-22 text-[30px] font-semibold text-[#0f172a] placeholder-[rgba(15,23,42,0.35)] focus:outline-none transition-colors disabled:opacity-50"
                     style={{
                       borderColor: errors.department
                         ? "#dd2237"
@@ -645,12 +645,12 @@ export function OnboardingScreen({
                       }
                     }}
                     disabled={departmentsLoading || !!departmentsError}
-                    className="absolute right-0 top-0 h-12 w-11 flex items-center justify-center text-[#64748b] disabled:opacity-40"
+                    className="absolute right-0 top-0 h-24 w-22 flex items-center justify-center text-[#64748b] disabled:opacity-40"
                   >
                     {selectedDepartment || departmentQuery ? (
                       <svg
-                        width="14"
-                        height="14"
+                        width="28"
+                        height="28"
                         fill="none"
                         viewBox="0 0 14 14"
                       >
@@ -663,8 +663,8 @@ export function OnboardingScreen({
                       </svg>
                     ) : (
                       <svg
-                        width="16"
-                        height="16"
+                        width="32"
+                        height="32"
                         fill="none"
                         viewBox="0 0 16 16"
                       >
@@ -682,9 +682,9 @@ export function OnboardingScreen({
                   {departmentDropdownOpen &&
                     !departmentsLoading &&
                     !departmentsError && (
-                    <div className="absolute top-[calc(100%+6px)] left-0 right-0 z-20 bg-white rounded-[12px] border border-[rgba(0,0,0,0.1)] shadow-lg max-h-64 overflow-y-auto">
+                    <div className="absolute top-[calc(100%+12px)] left-0 right-0 z-20 bg-white rounded-[12px] border border-[rgba(0,0,0,0.1)] shadow-lg max-h-128 overflow-y-auto">
                       {filteredDepartments.length === 0 ? (
-                        <p className="text-center text-[13px] text-[#94a3b8] py-6 px-3">
+                        <p className="text-center text-[26px] text-[#94a3b8] py-12 px-6">
                           {departments.length === 0
                             ? "This hospital has no active departments yet"
                             : `No departments match "${departmentQuery}"`}
@@ -694,7 +694,7 @@ export function OnboardingScreen({
                           <button
                             key={d.id}
                             onClick={() => pickDepartment(d)}
-                            className="w-full text-left px-4 py-3 text-[14px] font-medium whitespace-nowrap active:bg-[rgba(52,105,178,0.05)] border-b border-[rgba(0,0,0,0.05)] last:border-b-0"
+                            className="w-full text-left px-8 py-6 text-[28px] font-medium whitespace-nowrap active:bg-[rgba(52,105,178,0.05)] border-b border-[rgba(0,0,0,0.05)] last:border-b-0"
                             style={{
                               color:
                                 selectedDepartment?.id === d.id
@@ -710,18 +710,18 @@ export function OnboardingScreen({
                   )}
                 </div>
                 {errors.department && (
-                  <p className="text-[#dd2237] text-xs mt-1.5 font-medium">
+                  <p className="text-[#dd2237] text-xs mt-3 font-medium">
                     {errors.department}
                   </p>
                 )}
                 {departmentsError && (
-                  <div className="flex flex-col gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-3 mt-2">
-                    <div className="flex items-start gap-2">
+                  <div className="flex flex-col gap-4 bg-red-50 border border-red-200 rounded-xl px-6 py-6 mt-4">
+                    <div className="flex items-start gap-4">
                       <AlertTriangle
-                        size={14}
-                        className="text-[#dd2237] mt-0.5 shrink-0"
+                        size={28}
+                        className="text-[#dd2237] mt-1 shrink-0"
                       />
-                      <p className="text-[11px] text-[#dd2237] leading-relaxed">
+                      <p className="text-[22px] text-[#dd2237] leading-relaxed">
                         {departmentsError}
                       </p>
                     </div>
@@ -730,7 +730,7 @@ export function OnboardingScreen({
                         selectedHospital?.id &&
                         loadDepartments(selectedHospital.id)
                       }
-                      className="text-[12px] font-semibold text-[#3469b2] text-left"
+                      className="text-[24px] font-semibold text-[#3469b2] text-left"
                     >
                       Try again
                     </button>
@@ -742,18 +742,18 @@ export function OnboardingScreen({
             {selectedDepartment && (
               <>
                 {wardsLoading && (
-                      <p className="text-center text-[13px] text-[#64748b] py-6">
+                      <p className="text-center text-[26px] text-[#64748b] py-12">
                         Loading wards…
                       </p>
                     )}
 
                     {wardsError && (
-                      <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-3">
+                      <div className="flex items-start gap-4 bg-red-50 border border-red-200 rounded-xl px-6 py-6">
                         <AlertTriangle
-                          size={14}
-                          className="text-[#dd2237] mt-0.5 shrink-0"
+                          size={28}
+                          className="text-[#dd2237] mt-1 shrink-0"
                         />
-                        <p className="text-[11px] text-[#dd2237] leading-relaxed">
+                        <p className="text-[22px] text-[#dd2237] leading-relaxed">
                           {wardsError} — check your connection and
                           try again.
                         </p>
@@ -767,8 +767,8 @@ export function OnboardingScreen({
                           e.stopPropagation()
                         }
                       >
-                        <div className="flex items-center justify-between mb-2">
-                          <label className="block text-[11px] font-bold text-[#64748b] uppercase tracking-wider">
+                        <div className="flex items-center justify-between mb-4">
+                          <label className="block text-[22px] font-bold text-[#64748b] uppercase tracking-wider">
                             {showAllWards
                               ? `All wards at ${selectedHospital?.name ?? "this hospital"}`
                               : selectedDepartment
@@ -783,7 +783,7 @@ export function OnboardingScreen({
                                   setShowAllWards((v) => !v);
                                   setWardQuery("");
                                 }}
-                                className="text-[10px] font-semibold text-[#3469b2] shrink-0"
+                                className="text-[20px] font-semibold text-[#3469b2] shrink-0"
                               >
                                 {showAllWards
                                   ? "Filter by department"
@@ -805,7 +805,7 @@ export function OnboardingScreen({
                             }}
                             placeholder="Search or tap to browse wards…"
                             autoComplete="off"
-                            className="w-full h-12 bg-[#f4f6f9] rounded-[12px] border-2 px-4 pr-11 text-[15px] font-semibold text-[#0f172a] placeholder-[rgba(15,23,42,0.35)] focus:outline-none transition-colors"
+                            className="w-full h-24 bg-[#f4f6f9] rounded-[12px] border-2 px-8 pr-22 text-[30px] font-semibold text-[#0f172a] placeholder-[rgba(15,23,42,0.35)] focus:outline-none transition-colors"
                             style={{
                               borderColor: selectedWardId
                                 ? "#3469b2"
@@ -826,12 +826,12 @@ export function OnboardingScreen({
                                 setWardDropdownOpen((o) => !o);
                               }
                             }}
-                            className="absolute right-0 top-0 h-12 w-11 flex items-center justify-center text-[#64748b]"
+                            className="absolute right-0 top-0 h-24 w-22 flex items-center justify-center text-[#64748b]"
                           >
                             {selectedWardId || wardQuery ? (
                               <svg
-                                width="14"
-                                height="14"
+                                width="28"
+                                height="28"
                                 fill="none"
                                 viewBox="0 0 14 14"
                               >
@@ -844,8 +844,8 @@ export function OnboardingScreen({
                               </svg>
                             ) : (
                               <svg
-                                width="16"
-                                height="16"
+                                width="32"
+                                height="32"
                                 fill="none"
                                 viewBox="0 0 16 16"
                               >
@@ -861,7 +861,7 @@ export function OnboardingScreen({
                           </button>
 
                           {wardDropdownOpen && (
-                            <div className="absolute top-[calc(100%+6px)] left-0 right-0 z-20 bg-white rounded-[12px] border border-[rgba(0,0,0,0.1)] shadow-lg max-h-64 overflow-y-auto">
+                            <div className="absolute top-[calc(100%+12px)] left-0 right-0 z-20 bg-white rounded-[12px] border border-[rgba(0,0,0,0.1)] shadow-lg max-h-128 overflow-y-auto">
                               {(() => {
                                 const filtered =
                                   departmentWards.filter((w) =>
@@ -873,7 +873,7 @@ export function OnboardingScreen({
                                   );
                                 if (filtered.length === 0) {
                                   return (
-                                    <p className="text-center text-[13px] text-[#94a3b8] py-6 px-3">
+                                    <p className="text-center text-[26px] text-[#94a3b8] py-12 px-6">
                                       No wards match "
                                       {wardQuery}"
                                     </p>
@@ -883,7 +883,7 @@ export function OnboardingScreen({
                                   <button
                                     key={w.id}
                                     onClick={() => pickWard(w)}
-                                    className="w-full text-left px-4 py-3 active:bg-[rgba(52,105,178,0.05)] border-b border-[rgba(0,0,0,0.05)] last:border-b-0"
+                                    className="w-full text-left px-8 py-6 active:bg-[rgba(52,105,178,0.05)] border-b border-[rgba(0,0,0,0.05)] last:border-b-0"
                                     style={{
                                       color:
                                         selectedWardId === w.id
@@ -891,10 +891,10 @@ export function OnboardingScreen({
                                           : "#0f172a",
                                     }}
                                   >
-                                    <p className="text-[14px] font-semibold">
+                                    <p className="text-[28px] font-semibold">
                                       {w.name}
                                     </p>
-                                    <p className="text-[11px] text-[#64748b] mt-0.5">
+                                    <p className="text-[22px] text-[#64748b] mt-1">
                                       {w.code} ·{" "}
                                       {w.bed_count} beds · capacity {w.capacity}
                                       {w.ward_section
@@ -911,9 +911,9 @@ export function OnboardingScreen({
                     )}
 
                 {selectedWardId && (
-              <div className="bg-[rgba(52,105,178,0.04)] border border-[rgba(52,105,178,0.12)] rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">
+              <div className="bg-[rgba(52,105,178,0.04)] border border-[rgba(52,105,178,0.12)] rounded-xl p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <p className="text-[22px] font-bold text-[#64748b] uppercase tracking-wider">
                     Ward Details
                   </p>
                   {wards.length > 0 && (
@@ -926,7 +926,7 @@ export function OnboardingScreen({
                         setReplaceConfirm(false);
                         setCreateWardError(null);
                       }}
-                      className="text-[11px] font-semibold text-[#64748b]"
+                      className="text-[22px] font-semibold text-[#64748b]"
                     >
                       Change
                     </button>
@@ -935,21 +935,21 @@ export function OnboardingScreen({
 
                 {/* Real bed/patient data status for a picked (not newly-created) ward */}
                 {selectedWardId && (
-                  <div className="mb-3">
+                  <div className="mb-6">
                     {wardSeedLoading && (
-                      <p className="text-[11px] text-[#64748b]">
+                      <p className="text-[22px] text-[#64748b]">
                         Loading bed details…
                       </p>
                     )}
                     {wardSeedError && (
-                      <p className="text-[11px] text-[#dd2237]">
+                      <p className="text-[22px] text-[#dd2237]">
                         Couldn't load bed details ({wardSeedError})
                         — this device will start with all beds
                         available instead.
                       </p>
                     )}
                     {wardSeed && !wardSeedLoading && (
-                      <p className="text-[11px] text-[#156f48] font-medium">
+                      <p className="text-[22px] text-[#156f48] font-medium">
                         ✓ Inherited {wardSeed.patients.length}{" "}
                         occupied ·{" "}
                         {wardSeed.beds.length -
@@ -958,12 +958,12 @@ export function OnboardingScreen({
                       </p>
                     )}
                     {attachedToOtherDevice && attachedDevice ? (
-                      <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 mt-2">
+                      <div className="flex items-start gap-4 bg-red-50 border border-red-200 rounded-xl px-6 py-5 mt-4">
                         <AlertTriangle
-                          size={14}
-                          className="text-[#dd2237] mt-0.5 shrink-0"
+                          size={28}
+                          className="text-[#dd2237] mt-1 shrink-0"
                         />
-                        <p className="text-[11px] text-[#dd2237] leading-relaxed">
+                        <p className="text-[22px] text-[#dd2237] leading-relaxed">
                           <span className="font-bold">
                             This ward is already set up on another
                             device
@@ -978,13 +978,13 @@ export function OnboardingScreen({
                         </p>
                       </div>
                     ) : attachedToThisDevice ? (
-                      <p className="text-[11px] text-[#3469b2] font-medium mt-1">
+                      <p className="text-[22px] text-[#3469b2] font-medium mt-2">
                         This device is already linked to this ward —
                         finishing will simply refresh it.
                       </p>
                     ) : (
                       selectedWardInfo !== undefined && (
-                        <p className="text-[11px] text-[#ff662f] font-medium mt-1">
+                        <p className="text-[22px] text-[#ff662f] font-medium mt-2">
                           No device is linked to this ward yet — this
                           one will be attached when you finish.
                         </p>
@@ -1002,28 +1002,28 @@ export function OnboardingScreen({
                   if (!ward) return null;
                   return (
                     <>
-                      <div className="mb-3">
-                        <label className="block text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-1.5">
+                      <div className="mb-6">
+                        <label className="block text-[20px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-3">
                           Ward Name
                         </label>
-                        <div className="w-full h-10 bg-[#f4f6f9] rounded-[10px] border-2 border-[#e2e8f0] px-3 flex items-center text-[14px] font-semibold text-[#0f172a] opacity-50 cursor-not-allowed">
+                        <div className="w-full h-20 bg-[#f4f6f9] rounded-[10px] border-2 border-[#e2e8f0] px-6 flex items-center text-[28px] font-semibold text-[#0f172a] opacity-50 cursor-not-allowed">
                           {ward.name}
                         </div>
                       </div>
-                      <div className="flex gap-3">
-                        <div className="w-24">
-                          <label className="block text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-1.5">
+                      <div className="flex gap-6">
+                        <div className="w-48">
+                          <label className="block text-[20px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-3">
                             Floor
                           </label>
-                          <div className="w-full h-10 bg-[#f4f6f9] rounded-[10px] border-2 border-[#e2e8f0] px-3 flex items-center text-[14px] font-semibold text-[#0f172a] opacity-50 cursor-not-allowed">
+                          <div className="w-full h-20 bg-[#f4f6f9] rounded-[10px] border-2 border-[#e2e8f0] px-6 flex items-center text-[28px] font-semibold text-[#0f172a] opacity-50 cursor-not-allowed">
                             {ward.ward_section || "—"}
                           </div>
                         </div>
                         <div className="flex-1">
-                          <label className="block text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-1.5">
+                          <label className="block text-[20px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-3">
                             Beds / Capacity
                           </label>
-                          <div className="w-full h-10 bg-[#f4f6f9] rounded-[10px] border-2 border-[#e2e8f0] px-3 flex items-center text-[14px] font-semibold text-[#0f172a] opacity-50 cursor-not-allowed">
+                          <div className="w-full h-20 bg-[#f4f6f9] rounded-[10px] border-2 border-[#e2e8f0] px-6 flex items-center text-[28px] font-semibold text-[#0f172a] opacity-50 cursor-not-allowed">
                             {ward.bed_count} / {ward.capacity}
                           </div>
                         </div>
@@ -1040,17 +1040,17 @@ export function OnboardingScreen({
       </div>
 
       {/* Footer CTA */}
-      <div className="flex-shrink-0 px-5 py-4 bg-white border-t border-black/10 space-y-2">
+      <div className="flex-shrink-0 px-10 py-8 bg-white border-t border-black/10 space-y-4">
         {step === 1 ? (
           <button
             onClick={() => validateStep1() && setStep(2)}
-            className="w-full h-12 rounded-[12px] text-white text-[15px] font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            className="w-full h-24 rounded-[12px] text-white text-[30px] font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-4"
             style={{ backgroundColor: "#3469b2" }}
           >
             Continue
             <svg
-              width="16"
-              height="16"
+              width="32"
+              height="32"
               fill="none"
               viewBox="0 0 16 16"
             >
@@ -1066,12 +1066,12 @@ export function OnboardingScreen({
         ) : (
           <>
             {createWardError && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 mb-1">
+              <div className="flex items-start gap-4 bg-red-50 border border-red-200 rounded-xl px-6 py-5 mb-2">
                 <AlertTriangle
-                  size={14}
-                  className="text-[#dd2237] mt-0.5 shrink-0"
+                  size={28}
+                  className="text-[#dd2237] mt-1 shrink-0"
                 />
-                <p className="text-[11px] text-[#dd2237] leading-relaxed">
+                <p className="text-[22px] text-[#dd2237] leading-relaxed">
                   Couldn't set up this device on Mediboard (
                   {createWardError}). Nothing was saved — check your
                   connection and try again.
@@ -1079,17 +1079,17 @@ export function OnboardingScreen({
               </div>
             )}
             {replaceConfirm && attachedToOtherDevice && (
-              <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-3 mb-1 flex flex-col gap-2">
-                <p className="text-[12px] text-[#dd2237] font-semibold leading-relaxed">
+              <div className="bg-red-50 border border-red-200 rounded-xl px-6 py-6 mb-2 flex flex-col gap-4">
+                <p className="text-[24px] text-[#dd2237] font-semibold leading-relaxed">
                   Replace the device currently linked to this ward?
                   That device will be detached and will no longer
                   sync. This can't be undone from here.
                 </p>
-                <div className="flex gap-2">
+                <div className="flex gap-4">
                   <button
                     onClick={() => handleFinish(true)}
                     disabled={creatingWardBusy}
-                    className="flex-1 h-10 rounded-[10px] text-white text-[13px] font-bold active:scale-[0.98] disabled:opacity-40"
+                    className="flex-1 h-20 rounded-[10px] text-white text-[26px] font-bold active:scale-[0.98] disabled:opacity-40"
                     style={{ backgroundColor: "#dd2237" }}
                   >
                     Yes, replace it
@@ -1097,7 +1097,7 @@ export function OnboardingScreen({
                   <button
                     onClick={() => setReplaceConfirm(false)}
                     disabled={creatingWardBusy}
-                    className="flex-1 h-10 rounded-[10px] bg-white border border-red-200 text-[#dd2237] text-[13px] font-semibold active:opacity-70 disabled:opacity-40"
+                    className="flex-1 h-20 rounded-[10px] bg-white border border-red-200 text-[#dd2237] text-[26px] font-semibold active:opacity-70 disabled:opacity-40"
                   >
                     Cancel
                   </button>
@@ -1109,7 +1109,7 @@ export function OnboardingScreen({
               disabled={
                 !selectedWardId || creatingWardBusy || replaceConfirm
               }
-              className="w-full h-12 rounded-[12px] text-white text-[15px] font-bold active:scale-[0.98] transition-all disabled:opacity-40"
+              className="w-full h-24 rounded-[12px] text-white text-[30px] font-bold active:scale-[0.98] transition-all disabled:opacity-40"
               style={{ backgroundColor: "#156f48" }}
             >
               {creatingWardBusy
@@ -1123,7 +1123,7 @@ export function OnboardingScreen({
             <button
               onClick={() => setStep(1)}
               disabled={creatingWardBusy}
-              className="w-full h-10 rounded-[12px] text-[#64748b] text-[13px] font-semibold active:opacity-70 disabled:opacity-40"
+              className="w-full h-20 rounded-[12px] text-[#64748b] text-[26px] font-semibold active:opacity-70 disabled:opacity-40"
             >
               ← Back
             </button>
@@ -1133,22 +1133,22 @@ export function OnboardingScreen({
     </div>
     {showMediboardSignupModal && (
       <div
-        className="fixed inset-0 z-[200] bg-black/40 flex items-center justify-center p-5"
+        className="fixed inset-0 z-[200] bg-black/40 flex items-center justify-center p-10"
         onPointerDown={() => setShowMediboardSignupModal(false)}
       >
         <div
-          className="bg-white rounded-2xl p-5 max-w-sm w-full"
+          className="bg-white rounded-2xl p-10 max-w-sm w-full"
           style={{ fontFamily: "Inter, system-ui, sans-serif" }}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <p className="text-[15px] font-bold text-[#0f172a] mb-2">
+          <p className="text-[30px] font-bold text-[#0f172a] mb-4">
             Hospital not listed
           </p>
-          <p className="text-[13px] text-[#334155] leading-relaxed">
+          <p className="text-[26px] text-[#334155] leading-relaxed">
             Contact Sonvisage for Mediboard Account Setup to
             proceed.
           </p>
-          <p className="text-[13px] text-[#334155] leading-relaxed mt-2">
+          <p className="text-[26px] text-[#334155] leading-relaxed mt-4">
             For further info contact us at:{" "}
             <a
               href="mailto:contact@sonvisage.com"
@@ -1159,7 +1159,7 @@ export function OnboardingScreen({
           </p>
           <button
             onClick={() => setShowMediboardSignupModal(false)}
-            className="w-full h-11 rounded-[12px] text-white text-[14px] font-bold mt-4 active:scale-[0.98] transition-all"
+            className="w-full h-22 rounded-[12px] text-white text-[28px] font-bold mt-8 active:scale-[0.98] transition-all"
             style={{ backgroundColor: "#3469b2" }}
           >
             Got it
@@ -1186,7 +1186,7 @@ function HospitalLogo({
   const showImage = !!src && !failed;
   return (
     <span
-      className="shrink-0 w-9 h-9 rounded-[10px] bg-[#f4f6f9] border border-[rgba(0,0,0,0.06)] overflow-hidden flex items-center justify-center"
+      className="shrink-0 w-18 h-18 rounded-[10px] bg-[#f4f6f9] border border-[rgba(0,0,0,0.06)] overflow-hidden flex items-center justify-center"
       aria-hidden="true"
     >
       {showImage ? (
@@ -1198,7 +1198,7 @@ function HospitalLogo({
           className="w-full h-full object-cover"
         />
       ) : (
-        <Hospital size={18} className="text-[#94a3b8]" />
+        <Hospital size={36} className="text-[#94a3b8]" />
       )}
     </span>
   );

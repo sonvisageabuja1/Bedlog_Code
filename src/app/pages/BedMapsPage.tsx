@@ -11,6 +11,16 @@ import { BedMapsStatusIcon } from "../components/icons/BedMapsStatusIcon";
 
 // ─── BED MAPS PAGE — from 02BedMaps-1 Figma design ──────────────────────────
 
+// Status pill colours for the reserved / maintenance / cleaning modal.
+const OTHER_STATUS_PILL: Partial<
+  Record<BedStatus, { bg: string; border: string; color: string }>
+> = {
+  reserved: { bg: "#ede9fb", border: "#c4b5f4", color: "#8464ba" },
+  maintenance: { bg: "#fff3cd", border: "#ffd97a", color: "#b45309" },
+  cleaning: { bg: "#e0f4fe", border: "#9bdcfb", color: "#0284c7" },
+  occupied: { bg: "#d0fae5", border: "#a4f4cf", color: "#00bd6d" },
+};
+
 export function BedMapsPage({
   beds,
   patients,
@@ -132,7 +142,7 @@ export function BedMapsPage({
 
       {/* Header row — "Beds" title + legend (matches Frame20) */}
       <div className="flex-shrink-0 flex items-center justify-between px-5 py-[10px]">
-        <p className="font-semibold leading-[24px] text-[#0f172a] text-[16px] whitespace-nowrap">
+        <p className="font-semibold leading-[28px] text-[#0f172a] text-[20px] whitespace-nowrap">
           Beds
         </p>
         <div className="flex items-center gap-[20px] px-[8px]">
@@ -150,7 +160,7 @@ export function BedMapsPage({
                 }}
               />
               <p
-                className="text-[#2b2b2b] text-[12px] font-semibold whitespace-nowrap"
+                className="text-[#2b2b2b] text-[16px] font-semibold whitespace-nowrap"
                 style={{
                   fontFamily: "'Plus Jakarta Sans', sans-serif",
                 }}
@@ -190,7 +200,7 @@ export function BedMapsPage({
                     openFor(searchRef.current);
                 }}
                 placeholder="Search bed, patient, MRN…"
-                className="flex-1 min-w-0 bg-transparent text-[14px] text-[rgba(15,23,42,0.8)] placeholder-[rgba(15,23,42,0.5)] focus:outline-none font-normal"
+                className="flex-1 min-w-0 bg-transparent text-[16px] text-[rgba(15,23,42,0.8)] placeholder-[rgba(15,23,42,0.5)] focus:outline-none font-normal"
               />
               <svg
                 className="shrink-0"
@@ -229,7 +239,7 @@ export function BedMapsPage({
                 className="bg-white h-[40px] rounded-[10px] border border-[rgba(0,0,0,0.1)] flex items-center justify-between px-[14px] gap-[8px] whitespace-nowrap"
                 style={{ minWidth: "130px" }}
               >
-                <p className="text-[14px] text-[rgba(15,23,42,0.5)] font-normal">
+                <p className="text-[16px] text-[rgba(15,23,42,0.5)] font-normal">
                   {wardFilter
                     ? (wards.find((w) => w.id === wardFilter)
                         ?.name ?? "All wards")
@@ -263,7 +273,7 @@ export function BedMapsPage({
                         setWardFilter(w.id);
                         setWardDropOpen(false);
                       }}
-                      className="w-full px-4 py-2.5 text-left text-[13px] font-medium whitespace-nowrap active:bg-[rgba(52,105,178,0.05)]"
+                      className="w-full px-4 py-2.5 text-left text-[15px] font-medium whitespace-nowrap active:bg-[rgba(52,105,178,0.05)]"
                       style={{
                         color:
                           wardFilter === w.id
@@ -291,7 +301,7 @@ export function BedMapsPage({
                 className="bg-white h-[40px] rounded-[10px] border border-[rgba(0,0,0,0.1)] flex items-center justify-between px-[14px] gap-[8px] whitespace-nowrap"
                 style={{ minWidth: "120px" }}
               >
-                <p className="text-[14px] text-[rgba(15,23,42,0.5)] font-normal">
+                <p className="text-[16px] text-[rgba(15,23,42,0.5)] font-normal">
                   {statusFilter
                     ? (BED_MAPS_STATUS[
                         statusFilter as BedStatus
@@ -328,7 +338,7 @@ export function BedMapsPage({
                         setStatusFilter(s.id);
                         setStatusDropOpen(false);
                       }}
-                      className="w-full px-4 py-2.5 text-left text-[13px] font-medium whitespace-nowrap active:bg-[rgba(52,105,178,0.05)]"
+                      className="w-full px-4 py-2.5 text-left text-[15px] font-medium whitespace-nowrap active:bg-[rgba(52,105,178,0.05)]"
                       style={{
                         color:
                           statusFilter === s.id
@@ -405,7 +415,7 @@ export function BedMapsPage({
                             )}
                         </div>
                         <p
-                          className="text-[19px] leading-[26px] mt-[6px] font-semibold whitespace-nowrap truncate max-w-full"
+                          className="text-[21px] leading-[28px] mt-[6px] font-semibold whitespace-nowrap truncate max-w-full"
                           style={{
                             color: meta.color,
                             fontFamily:
@@ -453,7 +463,7 @@ export function BedMapsPage({
           >
             {/* Title bar — centered title, close on the right */}
             <div className="relative flex items-center justify-center px-[16px] pt-[14px] pb-[8px]">
-              <p className="font-semibold text-[#2b2b2b] text-[24px] leading-[30px]">
+              <p className="font-semibold text-[#2b2b2b] text-[26px] leading-[32px]">
                 Update Bed Info
               </p>
               <button
@@ -479,7 +489,7 @@ export function BedMapsPage({
                 <p className="font-bold text-[#2b2b2b] text-[26px] leading-[32px]">
                   {bedDisplayNumber(beds, selectedBed.id)}
                 </p>
-                <p className="text-[#2b2b2b] text-[20px] leading-[26px]">
+                <p className="text-[#2b2b2b] text-[22px] leading-[28px]">
                   {modalWard?.name ?? "—"}
                 </p>
               </div>
@@ -487,7 +497,7 @@ export function BedMapsPage({
                 className="shrink-0 mt-[4px] px-[14px] py-[3px] rounded-full border border-[rgba(43,43,43,0.1)]"
                 style={{ backgroundColor: "#ebebeb" }}
               >
-                <p className="text-[18px] font-medium leading-[24px] text-[#2b2b2b]">
+                <p className="text-[20px] font-medium leading-[26px] text-[#2b2b2b]">
                   Available
                 </p>
               </div>
@@ -640,7 +650,7 @@ export function BedMapsPage({
           >
             {/* Title bar — centered title, close on the right */}
             <div className="relative flex items-center justify-center px-[16px] pt-[14px] pb-[8px]">
-              <p className="font-semibold text-[#2b2b2b] text-[24px] leading-[30px]">
+              <p className="font-semibold text-[#2b2b2b] text-[26px] leading-[32px]">
                 Update Bed Info
               </p>
               <button
@@ -666,7 +676,7 @@ export function BedMapsPage({
                 <p className="font-bold text-[#2b2b2b] text-[26px] leading-[32px]">
                   {bedDisplayNumber(beds, selectedBed.id)}
                 </p>
-                <p className="text-[#2b2b2b] text-[20px] leading-[26px]">
+                <p className="text-[#2b2b2b] text-[22px] leading-[28px]">
                   {modalWard?.name ?? "—"} • MRN{" "}
                   {modalPatient.hospitalNumber}
                 </p>
@@ -679,7 +689,7 @@ export function BedMapsPage({
                 style={{ backgroundColor: "#d0fae5" }}
               >
                 <p
-                  className="text-[18px] font-medium leading-[24px]"
+                  className="text-[20px] font-medium leading-[26px]"
                   style={{ color: "#00bd6d" }}
                 >
                   {BED_MAPS_STATUS.occupied.label}
@@ -787,7 +797,7 @@ export function BedMapsPage({
         </div>
       )}
 
-      {/* ── Reserved / maintenance / cleaning beds: centered modal (Figma 03) ── */}
+      {/* ── Reserved / maintenance / cleaning beds: wide "Update Bed Info" modal (new design) ── */}
       {selectedBed &&
         selectedBed.status !== "available" &&
         !(selectedBed.status === "occupied" && modalPatient) && (
@@ -797,40 +807,27 @@ export function BedMapsPage({
           onPointerDown={closeModal}
         >
           <div
-            className="bg-[#f7f7f7] rounded-[16px] w-full overflow-hidden shadow-2xl"
-            style={{ maxWidth: "420px" }}
+            className="bg-[#f7f7f7] rounded-[16px] w-full overflow-hidden shadow-2xl flex flex-col"
+            style={{
+              maxWidth: "780px",
+              maxHeight: "calc(100vh - 32px)",
+              fontFamily: "'Plus Jakarta Sans', sans-serif",
+            }}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            {/* Title bar */}
-            <div className="flex items-center justify-between px-[10px] py-[8px] border-b border-[rgba(0,0,0,0.08)]">
-              <div className="w-[20px]" />
-              <p
-                className="flex-1 text-center font-semibold text-[#2b2b2b] text-[16px] leading-[26px]"
-                style={{
-                  fontFamily: "'Plus Jakarta Sans', sans-serif",
-                }}
-              >
+            {/* Title bar — centered title, close on the right */}
+            <div className="relative flex items-center justify-center px-[16px] pt-[14px] pb-[8px]">
+              <p className="font-semibold text-[#2b2b2b] text-[26px] leading-[32px]">
                 Update Bed Info
               </p>
               <button
                 onPointerDown={closeModal}
-                className="shrink-0 size-[20px] flex items-center justify-center active:opacity-60"
+                className="absolute right-[24px] top-[16px] size-[28px] flex items-center justify-center active:opacity-60"
+                aria-label="Close"
               >
-                <svg
-                  width="12.5"
-                  height="12.5"
-                  fill="none"
-                  viewBox="0 0 12.5 12.5"
-                >
+                <svg width="16" height="16" fill="none" viewBox="0 0 12.5 12.5">
                   <path
-                    d="M11.875 0.625L0.625 11.875"
-                    stroke="#2B2B2B"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="1.25"
-                  />
-                  <path
-                    d="M11.875 11.875L0.625 0.625"
+                    d="M11.875 0.625L0.625 11.875M11.875 11.875L0.625 0.625"
                     stroke="#2B2B2B"
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -840,405 +837,75 @@ export function BedMapsPage({
               </button>
             </div>
 
-            {/* Body */}
-            <div
-              className="p-[12px] flex flex-col gap-[8px] overflow-y-auto"
-              style={{ maxHeight: "calc(100vh - 140px)" }}
-            >
-              {/* Bed info card */}
-              <div className="bg-white rounded-[12px] px-[16px] py-[14px] flex flex-col gap-[4px]">
-                <div className="flex items-center justify-between">
-                  <p
-                    className="font-bold text-[#2b2b2b] text-[18px] leading-[26px]"
-                    style={{
-                      fontFamily:
-                        "'Plus Jakarta Sans', sans-serif",
-                    }}
-                  >
-                    {bedDisplayNumber(beds, selectedBed.id)}
-                  </p>
-                  {/* Status badge */}
+            {/* Bed summary — sits directly on the grey sheet */}
+            {(() => {
+              const pill = OTHER_STATUS_PILL[selectedBed.status] ?? OTHER_STATUS_PILL.reserved;
+              return (
+                <div className="px-[16px] pb-[12px] flex items-start justify-between gap-[12px]">
+                  <div className="flex flex-col">
+                    <p className="font-bold text-[#2b2b2b] text-[26px] leading-[32px]">
+                      {bedDisplayNumber(beds, selectedBed.id)}
+                    </p>
+                    <p className="text-[#2b2b2b] text-[22px] leading-[28px]">
+                      {modalWard?.name ?? "—"}
+                    </p>
+                  </div>
                   <div
-                    className="flex items-center gap-[4px] px-[10px] py-[3px] rounded-full border"
+                    className="shrink-0 mt-[4px] px-[14px] py-[3px] rounded-full border"
                     style={{
-                      backgroundColor:
-                        selectedBed.status === "occupied"
-                          ? "#d0fae5"
-                          : selectedBed.status === "maintenance"
-                            ? "#fff3cd"
-                            : selectedBed.status === "reserved"
-                              ? "#ede9fb"
-                              : "#f1f5f9",
-                      borderColor:
-                        selectedBed.status === "occupied"
-                          ? "#a4f4cf"
-                          : selectedBed.status === "maintenance"
-                            ? "#ffd97a"
-                            : selectedBed.status === "reserved"
-                              ? "#c4b5f4"
-                              : "#cbd5e1",
+                      backgroundColor: pill.bg,
+                      borderColor: pill.border,
                     }}
                   >
                     <p
-                      className="text-[12px] font-semibold leading-[18px]"
-                      style={{
-                        color:
-                          selectedBed.status === "occupied"
-                            ? "#00bd6d"
-                            : selectedBed.status ===
-                                "maintenance"
-                              ? "#b45309"
-                              : selectedBed.status ===
-                                  "reserved"
-                                ? "#6d28d9"
-                                : "#64748b",
-                      }}
+                      className="text-[20px] font-medium leading-[26px]"
+                      style={{ color: pill.color }}
                     >
-                      {
-                        BED_MAPS_STATUS[selectedBed.status]
-                          .label
-                      }
+                      {BED_MAPS_STATUS[selectedBed.status].label}
                     </p>
                   </div>
                 </div>
-                {/* Ward + MRN */}
-                <p className="text-[13px] text-[#6b7280] leading-[20px]">
-                  {modalWard?.name ?? "—"}
-                  {modalPatient
-                    ? ` • MRN ${modalPatient.hospitalNumber}`
-                    : ""}
-                </p>
-                {/* Admitted time */}
-                {modalPatient &&
-                  (() => {
-                    const h = Math.floor(
-                      (Date.now() - modalPatient.admittedAt) /
-                        3_600_000,
-                    );
-                    const label =
-                      h < 1
-                        ? "just now"
-                        : h < 24
-                          ? `${h} hour${h === 1 ? "" : "s"} ago`
-                          : `${Math.floor(h / 24)} day${Math.floor(h / 24) === 1 ? "" : "s"} ago`;
+              );
+            })()}
+
+            {/* Actions card */}
+            <div className="mx-[8px] mb-[8px] bg-white rounded-[12px] px-[16px] py-[16px] flex flex-col gap-[16px] overflow-y-auto">
+              <p className="font-semibold text-[#2b2b2b] text-[20px] leading-[26px]">
+                Set Status
+              </p>
+              <div className="flex flex-col gap-[12px] -mt-[8px]">
+                {(
+                  [
+                    "available",
+                    "maintenance",
+                    "reserved",
+                    "cleaning",
+                  ] as BedStatus[]
+                )
+                  .filter((s) => s !== selectedBed.status)
+                  .map((s) => {
+                    const sm = BED_MAPS_STATUS[s];
                     return (
-                      <p className="text-[13px] text-[#6b7280] leading-[20px]">
-                        Admitted {label}
-                      </p>
-                    );
-                  })()}
-              </div>
-
-              {/* Actions card */}
-              <div className="bg-white rounded-[12px] px-[16px] py-[14px] flex flex-col gap-[14px]">
-                {selectedBed.status === "occupied" &&
-                modalPatient ? (
-                  <>
-                    {/* Set Status label */}
-                    <p
-                      className="font-semibold text-[#2b2b2b] text-[14px] leading-[20px]"
-                      style={{
-                        fontFamily:
-                          "'Plus Jakarta Sans', sans-serif",
-                      }}
-                    >
-                      Set Status
-                    </p>
-
-                    {/* Transfer to */}
-                    <div className="flex flex-col gap-[8px]">
-                      <p className="text-[13px] font-medium text-[#2b2b2b]">
-                        Transfer to
-                      </p>
-                      <div className="relative">
-                        <select
-                          value={transferTarget}
-                          onChange={(e) =>
-                            setTransferTarget(e.target.value)
-                          }
-                          className="w-full appearance-none bg-white border border-[#e5e7eb] rounded-[10px] px-[14px] py-[11px] text-[13px] text-[#2b2b2b] pr-[36px] focus:outline-none"
-                          style={{
-                            fontFamily:
-                              "'Plus Jakarta Sans', sans-serif",
-                          }}
-                        >
-                          <option value="">
-                            Choose target bed
-                          </option>
-                          {availableForTransfer.map((b) => {
-                            const w = wards.find(
-                              (w) => w.id === b.wardId,
-                            );
-                            return (
-                              <option key={b.id} value={b.id}>
-                                {bedDisplayNumber(beds, b.id)}
-                                {w ? ` — ${w.name}` : ""}
-                              </option>
-                            );
-                          })}
-                        </select>
-                        <div className="pointer-events-none absolute right-[14px] top-1/2 -translate-y-1/2">
-                          <svg
-                            width="14"
-                            height="14"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              d="M6 9l6 6 6-6"
-                              stroke="#6b7280"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        </div>
-                      </div>
-
-                      {/* Transfer Patient button */}
                       <button
+                        key={s}
                         onPointerDown={() => {
-                          if (!transferTarget) {
-                            showToast(
-                              "Choose a target bed first",
-                              "error",
-                            );
-                            return;
-                          }
-                          onTransfer(
-                            modalPatient.id,
-                            selectedBed.id,
-                            transferTarget,
-                          );
-                          showToast(
-                            `HN ${modalPatient.hospitalNumber} transferred`,
-                            "success",
-                          );
+                          onStatusChange(selectedBed.id, s);
                           closeModal();
                         }}
-                        className="w-full h-[48px] rounded-[10px] border border-[#b4b4b4] bg-white flex items-center justify-center gap-[8px] active:opacity-70"
+                        className="w-full h-[70px] rounded-[8px] flex items-center justify-center active:opacity-80"
+                        style={{
+                          // "available" is a pale grey in the legend; the
+                          // action button needs a solid colour (mockup: green).
+                          backgroundColor:
+                            s === "available" ? "#00bd6d" : sm.color,
+                        }}
                       >
-                        <svg
-                          width="18"
-                          height="18"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            d="M7 17L17 7M17 7H7M17 7v10"
-                            stroke="#2b2b2b"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                        <span
-                          className="font-semibold text-[#2b2b2b] text-[15px]"
-                          style={{
-                            fontFamily:
-                              "'Plus Jakarta Sans', sans-serif",
-                          }}
-                        >
-                          Transfer Patient
+                        <span className="font-medium text-white text-[22px] whitespace-nowrap">
+                          Mark as {sm.label}
                         </span>
                       </button>
-                    </div>
-
-                    {/* Discharge Patient button */}
-                    <button
-                      onPointerDown={() => {
-                        onDischarge(
-                          modalPatient.id,
-                          selectedBed.id,
-                          "discharged",
-                        );
-                        showToast(
-                          `HN ${modalPatient.hospitalNumber} discharged`,
-                          "success",
-                        );
-                        closeModal();
-                      }}
-                      className="w-full h-[48px] rounded-[10px] border flex items-center justify-center gap-[8px] active:opacity-70"
-                      style={{
-                        backgroundColor: "#fff1f2",
-                        borderColor: "#ffccd3",
-                      }}
-                    >
-                      <svg
-                        width="18"
-                        height="18"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
-                          stroke="#c70036"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      <span
-                        className="font-semibold text-[#c70036] text-[15px]"
-                        style={{
-                          fontFamily:
-                            "'Plus Jakarta Sans', sans-serif",
-                        }}
-                      >
-                        Discharge Patient
-                      </span>
-                    </button>
-
-                    {/* Other Status */}
-                    <div className="flex flex-col gap-[10px]">
-                      <p
-                        className="font-semibold text-[#2b2b2b] text-[14px] leading-[20px]"
-                        style={{
-                          fontFamily:
-                            "'Plus Jakarta Sans', sans-serif",
-                        }}
-                      >
-                        Other Status
-                      </p>
-                      <div className="flex gap-[8px]">
-                        <button
-                          onPointerDown={() => {
-                            onDischarge(
-                              modalPatient.id,
-                              selectedBed.id,
-                              "lama",
-                            );
-                            showToast(
-                              `HN ${modalPatient.hospitalNumber} — LAMA`,
-                              "success",
-                            );
-                            closeModal();
-                          }}
-                          className="flex-1 h-[44px] rounded-[10px] flex items-center justify-center active:opacity-80"
-                          style={{ backgroundColor: "#ff662f" }}
-                        >
-                          <span
-                            className="font-semibold text-white text-[14px]"
-                            style={{
-                              fontFamily:
-                                "'Plus Jakarta Sans', sans-serif",
-                            }}
-                          >
-                            LAMA
-                          </span>
-                        </button>
-                        <button
-                          onPointerDown={() => {
-                            onDischarge(
-                              modalPatient.id,
-                              selectedBed.id,
-                              "deceased",
-                            );
-                            showToast(
-                              `HN ${modalPatient.hospitalNumber} — Deceased`,
-                              "success",
-                            );
-                            closeModal();
-                          }}
-                          className="flex-1 h-[44px] rounded-[10px] flex items-center justify-center active:opacity-80"
-                          style={{ backgroundColor: "#dd2237" }}
-                        >
-                          <span
-                            className="font-semibold text-white text-[14px]"
-                            style={{
-                              fontFamily:
-                                "'Plus Jakarta Sans', sans-serif",
-                            }}
-                          >
-                            Deceased
-                          </span>
-                        </button>
-                        <button
-                          onPointerDown={() => {
-                            onDischarge(
-                              modalPatient.id,
-                              selectedBed.id,
-                              "absconded",
-                            );
-                            showToast(
-                              `HN ${modalPatient.hospitalNumber} — Absconded`,
-                              "success",
-                            );
-                            closeModal();
-                          }}
-                          className="flex-1 h-[44px] rounded-[10px] flex items-center justify-center active:opacity-80"
-                          style={{ backgroundColor: "#808790" }}
-                        >
-                          <span
-                            className="font-semibold text-white text-[14px]"
-                            style={{
-                              fontFamily:
-                                "'Plus Jakarta Sans', sans-serif",
-                            }}
-                          >
-                            Absconded
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  /* Non-occupied: status change */
-                  <>
-                    <p
-                      className="font-semibold text-[#2b2b2b] text-[14px] leading-[20px]"
-                      style={{
-                        fontFamily:
-                          "'Plus Jakarta Sans', sans-serif",
-                      }}
-                    >
-                      Set Status
-                    </p>
-                    <div className="flex flex-col gap-[8px]">
-                      {(
-                        [
-                          "available",
-                          "reserved",
-                          "maintenance",
-                          "cleaning",
-                        ] as BedStatus[]
-                      )
-                        .filter((s) => s !== selectedBed.status)
-                        .map((s) => {
-                          const sm = BED_MAPS_STATUS[s];
-                          return (
-                            <button
-                              key={s}
-                              onPointerDown={() => {
-                                onStatusChange(
-                                  selectedBed.id,
-                                  s,
-                                );
-                                closeModal();
-                              }}
-                              className="w-full flex items-center gap-[10px] px-[14px] py-[13px] rounded-[10px] border border-[rgba(0,0,0,0.08)] active:opacity-70"
-                              style={{
-                                backgroundColor: `${sm.color}14`,
-                              }}
-                            >
-                              <div
-                                className="size-[9px] rounded-full shrink-0"
-                                style={{
-                                  backgroundColor: sm.color,
-                                }}
-                              />
-                              <span
-                                className="text-[14px] font-semibold"
-                                style={{ color: sm.color }}
-                              >
-                                Mark as {sm.label}
-                              </span>
-                            </button>
-                          );
-                        })}
-                    </div>
-                  </>
-                )}
+                    );
+                  })}
               </div>
             </div>
           </div>
