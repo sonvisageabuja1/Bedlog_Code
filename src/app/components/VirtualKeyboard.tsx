@@ -17,6 +17,12 @@ const KB_ROWS = [
 ];
 const SYMBOL_ROWS = [["-", "_", ".", "@", "/", "(", ")", "+", "#", "%"]];
 
+// Rendered height of KeyboardPad (3 key rows + bottom row, measured
+// 2026-09-28 after the toolbar row was dropped). Anything that pads its
+// scroll area so the focused field stays above the keys uses this one
+// number — keep it in step if the row count or key height changes.
+export const KEYBOARD_HEIGHT = 280;
+
 // The actual keyboard UI — key rows, shift/symbols toggling, press/delete
 // logic — deliberately independent of KbContext so it can be reused
 // anywhere a field needs its own self-contained keyboard (see
@@ -81,37 +87,6 @@ export function KeyboardPad({
         e.stopPropagation();
       }}
     >
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-700">
-        <div className="flex gap-3">
-          <button
-            onPointerDown={(e) => {
-              e.preventDefault();
-              setSymbols(!symbols);
-            }}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg ${symbols ? "bg-[#3469b2] text-white" : "bg-slate-700 text-slate-300"}`}
-          >
-            {symbols ? "ABC" : "#+="}
-          </button>
-          <button
-            onPointerDown={(e) => {
-              e.preventDefault();
-              setShift(!shift);
-            }}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg ${shift ? "bg-[#3469b2] text-white" : "bg-slate-700 text-slate-300"}`}
-          >
-            ⇧ Shift
-          </button>
-        </div>
-        <button
-          onPointerDown={(e) => {
-            e.preventDefault();
-            onDone();
-          }}
-          className="px-4 py-2 text-sm font-semibold rounded-lg bg-slate-700 text-slate-300"
-        >
-          Done ✓
-        </button>
-      </div>
       <div className="px-3 py-3 space-y-2">
         {rows.map((row, ri) => (
           <div key={ri} className="flex justify-center gap-2">
@@ -150,6 +125,21 @@ export function KeyboardPad({
           >
             {symbols ? "ABC" : "#+="}
           </button>
+          {/* Shift lives on the bottom row (no separate toolbar row, so the
+              keyboard stays short); there's room here to spell it out
+              next to the icon. Hidden in the symbols view where it has no
+              effect. */}
+          {!symbols && (
+            <button
+              onPointerDown={(e) => {
+                e.preventDefault();
+                setShift(!shift);
+              }}
+              className={`h-14 px-5 text-base font-semibold rounded-lg ${shift ? "bg-[#3469b2] text-white" : "bg-slate-700 text-slate-300"}`}
+            >
+              ⇧ Shift
+            </button>
+          )}
           <button
             onPointerDown={(e) => {
               e.preventDefault();
