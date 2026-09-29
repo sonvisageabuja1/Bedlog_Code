@@ -3,6 +3,7 @@ import { AlertTriangle, Hospital } from "lucide-react";
 import type { AppConfig, Bed, Patient } from "../types";
 import { KbContext } from "../lib/kbContext";
 import { getOrCreateInstallId } from "../lib/sync";
+import { KEYBOARD_HEIGHT } from "./VirtualKeyboard";
 import {
   fetchMediboardDepartments,
   fetchMediboardHospitals,
@@ -18,7 +19,6 @@ import {
   type MediboardWard,
   type MediboardWardInfo,
 } from "../lib/mediboard";
-import { MediboardsLogo } from "./icons/MediboardsLogo";
 
 // ─── ONBOARDING FLOW ─────────────────────────────────────────────────────────
 // Onboarding requires internet — it fetches the hospital + ward list from
@@ -32,7 +32,11 @@ import { MediboardsLogo } from "./icons/MediboardsLogo";
 
 export function OnboardingScreen({
   onComplete,
+  onBack,
 }: {
+  // Step 1's "Back" — leaves onboarding entirely (App returns to the
+  // needs-setup screen). Optional so the screen still works standalone.
+  onBack?: () => void;
   // deviceId/deviceLabel are normally a device-level concern handled by the
   // caller (App) — generated locally, not something onboarding collects.
   // The one exception is `deviceOverride`: creating a brand-new ward goes
@@ -49,7 +53,20 @@ export function OnboardingScreen({
   ) => void;
 }) {
   const [step, setStep] = useState<1 | 2>(1);
-  const { openFor } = useContext(KbContext);
+  const { openFor, isOpen: kbOpen } = useContext(KbContext);
+
+  // The shared on-screen keyboard is `fixed` to the bottom of the viewport
+  // (z-250, above this screen). Without clearance the field being typed
+  // into, and its dropdown, sit underneath the keys. Padding the scroll
+  // body by the keyboard's height (same as App.tsx does for <main>) and
+  // scrolling the focused field to the top keeps both visible.
+  const revealField = (el: HTMLElement) => {
+    // Next frame so the padding is applied before we scroll.
+    const target = el.closest<HTMLElement>("[data-field]") ?? el;
+    requestAnimationFrame(() =>
+      target.scrollIntoView({ block: "start", behavior: "smooth" }),
+    );
+  };
 
   // ── Step 1: hospital search ──
   const [hospitals, setHospitals] = useState<MediboardHospital[]>(
@@ -385,39 +402,50 @@ export function OnboardingScreen({
         setWardDropdownOpen(false);
       }}
     >
-      {/* Header */}
-      <div className="flex-shrink-0 bg-[#3469b2] px-10 pt-12 pb-10">
-        <div className="flex items-center gap-6 mb-8">
-          <MediboardsLogo variant="light" scale={2} />
+      {/* Header — kept to a single compact bar so the field + on-screen
+          keyboard fit on the device display; the logo lives on the
+          splash/needs-setup screens instead. */}
+      <div className="flex-shrink-0 bg-[#3469b2] px-7 py-7 flex items-center justify-between gap-6">
+        <div className="min-w-0">
+          <p className="text-white font-bold text-[30px] leading-tight truncate">
+            Welcome to Bedlog
+          </p>
+          <p className="text-white/70 text-[20px] mt-1 truncate">
+            {step === 1
+              ? "Tell us about your hospital"
+              : "Pick the ward this device manages"}
+          </p>
         </div>
-        <p className="text-white/70 text-[24px] font-semibold uppercase tracking-widest mb-2">
-          Step {step} of 2
-        </p>
-        <p className="text-white font-bold text-[36px] leading-snug">
-          {step === 1
-            ? "Find your hospital"
-            : "Select your department and ward"}
-        </p>
-        <p className="text-white/60 text-[24px] mt-2">
-          {step === 1
-            ? "Search Mediboard for the hospital this device belongs to"
-            : "Pick the ward this device manages"}
-        </p>
-        {/* Progress bar */}
-        <div className="mt-8 h-3 bg-white/20 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-white rounded-full transition-all duration-500"
-            style={{ width: `${progress}%` }}
-          />
+        <div className="shrink-0 flex flex-col items-end gap-3">
+          <p className="text-white/80 text-[18px] font-semibold uppercase tracking-[0.2em]">
+            Step {step} of 2
+          </p>
+          <div className="flex items-center gap-2">
+            {[1, 2].map((n) => (
+              <span
+                key={n}
+                className="h-3 rounded-full transition-all duration-300"
+                style={{
+                  width: n === step ? 40 : 12,
+                  backgroundColor:
+                    n <= step ? "#ffffff" : "rgba(255,255,255,0.35)",
+                }}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto p-10">
+      <div
+        className="flex-1 overflow-y-auto px-7 pt-7 pb-10"
+        style={{ paddingBottom: kbOpen ? KEYBOARD_HEIGHT : undefined }}
+      >
         {step === 1 && (
-          <div className="space-y-6 pt-4">
+          <div className="space-y-6">
             {/* Combo dropdown — type to filter, tap to scroll/pick */}
                 <div
+                  data-field
                   className="relative"
                   onPointerDown={(e) => e.stopPropagation()}
                 >
@@ -433,10 +461,11 @@ export function OnboardingScreen({
                         setSelectedHospital(null);
                         setHospitalDropdownOpen(true);
                       }}
-                      onFocus={() => {
+                      onFocus={(e) => {
                         hospitalSearchRef.current &&
                           openFor(hospitalSearchRef.current);
                         setHospitalDropdownOpen(true);
+                        revealField(e.currentTarget);
                       }}
                       placeholder={
                         hospitalsLoading
@@ -595,9 +624,10 @@ export function OnboardingScreen({
         )}
 
         {step === 2 && (
-          <div className="space-y-6 pt-4">
+          <div className="space-y-6">
             {
               <div
+                data-field
                 className="relative"
                 onPointerDown={(e) => e.stopPropagation()}
               >
@@ -615,6 +645,7 @@ export function OnboardingScreen({
                     onFocus={(e) => {
                       openFor(e.currentTarget);
                       setDepartmentDropdownOpen(true);
+                      revealField(e.currentTarget);
                     }}
                     placeholder={
                       departmentsLoading
@@ -762,6 +793,7 @@ export function OnboardingScreen({
 
                     {!wardsLoading && !wardsError && (
                       <div
+                        data-field
                         className="relative"
                         onPointerDown={(e) =>
                           e.stopPropagation()
@@ -802,6 +834,7 @@ export function OnboardingScreen({
                             onFocus={(e) => {
                               openFor(e.currentTarget);
                               setWardDropdownOpen(true);
+                              revealField(e.currentTarget);
                             }}
                             placeholder="Search or tap to browse wards…"
                             autoComplete="off"
@@ -1039,96 +1072,112 @@ export function OnboardingScreen({
         )}
       </div>
 
-      {/* Footer CTA */}
-      <div className="flex-shrink-0 px-10 py-8 bg-white border-t border-black/10 space-y-4">
-        {step === 1 ? (
+      {/* Footer CTA — Back + primary action on one row so the bar stays
+          short enough to leave room for the keyboard above it. */}
+      <div className="flex-shrink-0 px-7 py-6 bg-white border-t border-black/10 space-y-4">
+        {step === 2 && createWardError && (
+          <div className="flex items-start gap-4 bg-red-50 border border-red-200 rounded-xl px-6 py-5">
+            <AlertTriangle
+              size={28}
+              className="text-[#dd2237] mt-1 shrink-0"
+            />
+            <p className="text-[22px] text-[#dd2237] leading-relaxed">
+              Couldn't set up this device on Mediboard (
+              {createWardError}). Nothing was saved — check your
+              connection and try again.
+            </p>
+          </div>
+        )}
+        {step === 2 && replaceConfirm && attachedToOtherDevice && (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-6 py-6 flex flex-col gap-4">
+            <p className="text-[24px] text-[#dd2237] font-semibold leading-relaxed">
+              Replace the device currently linked to this ward?
+              That device will be detached and will no longer
+              sync. This can't be undone from here.
+            </p>
+            <div className="flex gap-4">
+              <button
+                onClick={() => handleFinish(true)}
+                disabled={creatingWardBusy}
+                className="flex-1 h-20 rounded-[10px] text-white text-[26px] font-bold active:scale-[0.98] disabled:opacity-40"
+                style={{ backgroundColor: "#dd2237" }}
+              >
+                Yes, replace it
+              </button>
+              <button
+                onClick={() => setReplaceConfirm(false)}
+                disabled={creatingWardBusy}
+                className="flex-1 h-20 rounded-[10px] bg-white border border-red-200 text-[#dd2237] text-[26px] font-semibold active:opacity-70 disabled:opacity-40"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="flex items-stretch gap-6">
           <button
-            onClick={() => validateStep1() && setStep(2)}
-            className="w-full h-24 rounded-[12px] text-white text-[30px] font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-4"
-            style={{ backgroundColor: "#3469b2" }}
+            onClick={() => (step === 1 ? onBack?.() : setStep(1))}
+            disabled={step === 1 ? !onBack : creatingWardBusy}
+            className="shrink-0 h-20 px-8 rounded-[14px] bg-white border-2 border-[#cbd5e1] text-[#334155] text-[26px] font-semibold flex items-center justify-center gap-3 active:opacity-70 disabled:opacity-40 transition-all"
           >
-            Continue
-            <svg
-              width="32"
-              height="32"
-              fill="none"
-              viewBox="0 0 16 16"
-            >
+            <svg width="28" height="28" fill="none" viewBox="0 0 16 16">
               <path
-                d="M3 8h10M9 4l4 4-4 4"
-                stroke="white"
+                d="M13 8H3M7 4L3 8l4 4"
+                stroke="currentColor"
                 strokeWidth="1.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
             </svg>
+            Back
           </button>
-        ) : (
-          <>
-            {createWardError && (
-              <div className="flex items-start gap-4 bg-red-50 border border-red-200 rounded-xl px-6 py-5 mb-2">
-                <AlertTriangle
-                  size={28}
-                  className="text-[#dd2237] mt-1 shrink-0"
+          {step === 1 ? (
+            <button
+              onClick={() => validateStep1() && setStep(2)}
+              className="flex-1 h-20 rounded-[14px] text-white text-[28px] font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-4"
+              style={{ backgroundColor: "#3469b2" }}
+            >
+              Continue
+              <svg width="30" height="30" fill="none" viewBox="0 0 16 16">
+                <path
+                  d="M3 8h10M9 4l4 4-4 4"
+                  stroke="white"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
-                <p className="text-[22px] text-[#dd2237] leading-relaxed">
-                  Couldn't set up this device on Mediboard (
-                  {createWardError}). Nothing was saved — check your
-                  connection and try again.
-                </p>
-              </div>
-            )}
-            {replaceConfirm && attachedToOtherDevice && (
-              <div className="bg-red-50 border border-red-200 rounded-xl px-6 py-6 mb-2 flex flex-col gap-4">
-                <p className="text-[24px] text-[#dd2237] font-semibold leading-relaxed">
-                  Replace the device currently linked to this ward?
-                  That device will be detached and will no longer
-                  sync. This can't be undone from here.
-                </p>
-                <div className="flex gap-4">
-                  <button
-                    onClick={() => handleFinish(true)}
-                    disabled={creatingWardBusy}
-                    className="flex-1 h-20 rounded-[10px] text-white text-[26px] font-bold active:scale-[0.98] disabled:opacity-40"
-                    style={{ backgroundColor: "#dd2237" }}
-                  >
-                    Yes, replace it
-                  </button>
-                  <button
-                    onClick={() => setReplaceConfirm(false)}
-                    disabled={creatingWardBusy}
-                    className="flex-1 h-20 rounded-[10px] bg-white border border-red-200 text-[#dd2237] text-[26px] font-semibold active:opacity-70 disabled:opacity-40"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
+              </svg>
+            </button>
+          ) : (
             <button
               onClick={() => handleFinish(false)}
               disabled={
                 !selectedWardId || creatingWardBusy || replaceConfirm
               }
-              className="w-full h-24 rounded-[12px] text-white text-[30px] font-bold active:scale-[0.98] transition-all disabled:opacity-40"
+              className="flex-1 h-20 rounded-[14px] text-white text-[28px] font-bold active:scale-[0.98] transition-all disabled:opacity-40 flex items-center justify-center gap-4"
               style={{ backgroundColor: "#156f48" }}
             >
               {creatingWardBusy
                 ? "Setting up on Mediboard…"
                 : attachedToOtherDevice
-                  ? "Replace device & finish →"
+                  ? "Replace device & finish"
                   : attachedToThisDevice
-                    ? "Re-link this device →"
-                    : "Finish Setup →"}
+                    ? "Re-link this device"
+                    : "Finish Setup"}
+              {!creatingWardBusy && (
+                <svg width="30" height="30" fill="none" viewBox="0 0 16 16">
+                  <path
+                    d="M3 8h10M9 4l4 4-4 4"
+                    stroke="white"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
             </button>
-            <button
-              onClick={() => setStep(1)}
-              disabled={creatingWardBusy}
-              className="w-full h-20 rounded-[12px] text-[#64748b] text-[26px] font-semibold active:opacity-70 disabled:opacity-40"
-            >
-              ← Back
-            </button>
-          </>
-        )}
+          )}
+        </div>
       </div>
     </div>
     {showMediboardSignupModal && (

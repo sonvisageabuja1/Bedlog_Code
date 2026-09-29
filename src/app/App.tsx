@@ -39,7 +39,10 @@ import {
 } from "./lib/mediboard";
 import { DashboardNavIcon } from "./components/icons/DashboardNavIcon";
 import { BedMapsNavIcon } from "./components/icons/BedMapsNavIcon";
-import { VirtualKeyboard } from "./components/VirtualKeyboard";
+import {
+  KEYBOARD_HEIGHT,
+  VirtualKeyboard,
+} from "./components/VirtualKeyboard";
 import { TopBar } from "./components/TopBar";
 import { PinModal } from "./components/PinModal";
 import { SplashScreen } from "./components/SplashScreen";
@@ -679,6 +682,7 @@ export default function App() {
             <>
               <OnboardingScreen
                 onComplete={handleOnboardingComplete}
+                onBack={() => setAppState("needsSetup")}
               />
               <VirtualKeyboard />
             </>
@@ -704,7 +708,7 @@ export default function App() {
               <main
                 className={`flex-1 min-h-0 ${page === "dashboard" ? "overflow-y-auto" : "overflow-hidden"}`}
                 style={{
-                  paddingBottom: kbOpen ? 340 : 0,
+                  paddingBottom: kbOpen ? KEYBOARD_HEIGHT : 0,
                   transition: "padding-bottom 0.2s ease",
                 }}
               >

@@ -21,3 +21,26 @@ pnpm-debug.log*
 .vscode/
 .idea/
 .claude/
+# macOS
+.DS_Store
+._*
+__MACOSX/
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+.fseventsd
+# Node / Vite
+node_modules/
+dist/
+.vite/
+.cache/
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+# Environment / secrets
+.env
+.env.local
+.env.*.local
