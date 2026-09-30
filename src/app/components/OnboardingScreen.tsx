@@ -540,7 +540,7 @@ export function OnboardingScreen({
                     {hospitalDropdownOpen &&
                       !hospitalsLoading &&
                       !hospitalsError && (
-                        <div className="absolute top-[calc(100%+12px)] left-0 right-0 z-20 bg-white rounded-[12px] border border-[rgba(0,0,0,0.1)] shadow-lg max-h-128 overflow-y-auto">
+                        <div className="absolute top-[calc(100%+12px)] left-0 right-0 z-20 bg-white rounded-[12px] border border-[rgba(0,0,0,0.1)] shadow-lg max-h-128 overflow-y-auto touch-pan-y overscroll-contain">
                           {filteredHospitals.length === 0 ? (
                             <p className="text-center text-[26px] text-[#94a3b8] py-12 px-6">
                               No hospitals match "
@@ -713,7 +713,7 @@ export function OnboardingScreen({
                   {departmentDropdownOpen &&
                     !departmentsLoading &&
                     !departmentsError && (
-                    <div className="absolute top-[calc(100%+12px)] left-0 right-0 z-20 bg-white rounded-[12px] border border-[rgba(0,0,0,0.1)] shadow-lg max-h-128 overflow-y-auto">
+                    <div className="absolute top-[calc(100%+12px)] left-0 right-0 z-20 bg-white rounded-[12px] border border-[rgba(0,0,0,0.1)] shadow-lg max-h-128 overflow-y-auto touch-pan-y overscroll-contain">
                       {filteredDepartments.length === 0 ? (
                         <p className="text-center text-[26px] text-[#94a3b8] py-12 px-6">
                           {departments.length === 0
@@ -894,7 +894,7 @@ export function OnboardingScreen({
                           </button>
 
                           {wardDropdownOpen && (
-                            <div className="absolute top-[calc(100%+12px)] left-0 right-0 z-20 bg-white rounded-[12px] border border-[rgba(0,0,0,0.1)] shadow-lg max-h-128 overflow-y-auto">
+                            <div className="absolute top-[calc(100%+12px)] left-0 right-0 z-20 bg-white rounded-[12px] border border-[rgba(0,0,0,0.1)] shadow-lg max-h-128 overflow-y-auto touch-pan-y overscroll-contain">
                               {(() => {
                                 const filtered =
                                   departmentWards.filter((w) =>
