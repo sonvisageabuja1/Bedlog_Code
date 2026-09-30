@@ -201,3 +201,39 @@
     font-size: 14px;
   }
 }
+
+/* Global scrollbar. The kiosk runs Chromium, so the WebKit
+   pseudo-elements apply; the standard scrollbar-* properties cover any
+   newer engine. Applies to every scroll container in the app (page
+   bodies, lists, onboarding dropdowns): a thick, square, brand-blue
+   thumb with a white inset so it is easy to see and drag on the touch
+   display. The app background is white throughout, so the inset reads
+   as a gap rather than a stripe. */
+/* Chrome 121+ ignores the ::-webkit-scrollbar pseudo-elements as soon
+   as scrollbar-color or scrollbar-width is set, which would fall back
+   to its own rounded thumb. So the standard properties are only used
+   where the pseudo-elements are unsupported (e.g. Firefox). */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: auto;
+    scrollbar-color: rgba(52, 105, 178, 0.45) transparent;
+  }
+}
+*::-webkit-scrollbar {
+  /* 10px visible thumb + 4px white inset on each side */
+  width: 18px;
+  height: 18px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 8px 0;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(52, 105, 178, 0.45);
+  border: 4px solid #ffffff;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:active {
+  background-color: rgba(52, 105, 178, 0.75);
+}
