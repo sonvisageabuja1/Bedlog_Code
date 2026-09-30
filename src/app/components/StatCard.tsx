@@ -39,10 +39,10 @@ export function StatCard({
             fontFamily: "'Plus Jakarta Sans', sans-serif",
           }}
         >
-          <p className="font-semibold text-[#64748b] text-[13px] leading-normal whitespace-nowrap">
+          <p className="font-semibold text-[#64748b] text-[20px] leading-normal whitespace-nowrap">
             {label}
           </p>
-          <p className="font-bold text-[#0f172a] text-[28px] leading-none">
+          <p className="font-bold text-[#0f172a] text-[32px] leading-none">
             {value}
           </p>
         </div>

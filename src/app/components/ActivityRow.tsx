@@ -22,7 +22,7 @@ export function ActivityRow({
           style={{ backgroundColor: pillBg }}
         >
           <p
-            className="font-bold text-[11px] leading-normal whitespace-nowrap"
+            className="font-bold text-[20px] leading-normal whitespace-nowrap"
             style={{
               color: pillColor,
               fontFamily: "'Plus Jakarta Sans', sans-serif",
@@ -33,7 +33,7 @@ export function ActivityRow({
         </div>
         {/* Count */}
         <p
-          className="font-bold text-[#0f172a] text-[13px] leading-normal"
+          className="font-bold text-[#0f172a] text-[20px] leading-normal"
           style={{
             fontFamily: "'Plus Jakarta Sans', sans-serif",
           }}

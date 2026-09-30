@@ -141,8 +141,8 @@ export function ReportsPage({
             className="absolute border border-[rgba(0,0,0,0.1)] border-solid inset-0 pointer-events-none rounded-[9px]"
           />
           <svg
-            width="14"
-            height="14"
+            width="16"
+            height="16"
             fill="none"
             viewBox="0 0 24 24"
             className="shrink-0"
@@ -155,7 +155,7 @@ export function ReportsPage({
               strokeLinejoin="round"
             />
           </svg>
-          <p className="font-normal text-[14px] text-[rgba(15,23,42,0.5)] whitespace-nowrap leading-normal">
+          <p className="font-normal text-[16px] text-[rgba(15,23,42,0.5)] whitespace-nowrap leading-normal">
             Admissions History
           </p>
         </button>
@@ -195,14 +195,14 @@ export function ReportsPage({
           {/* Card header — Frame26 */}
           <div className="flex items-center justify-between w-full">
             <p
-              className="font-bold text-[#0f172a] text-[14px] whitespace-nowrap"
+              className="font-bold text-[#0f172a] text-[20px] whitespace-nowrap"
               style={{
                 fontFamily: "'Plus Jakarta Sans', sans-serif",
               }}
             >
               Recent Activity
             </p>
-            <div className="flex items-center gap-[20px] text-[12px]">
+            <div className="flex items-center gap-[20px] text-[20px]">
               {/* Period filter — selectable: today / this week / this
                   month / all time. A backdrop behind the menu closes it
                   on any outside tap, no top-level handler needed. */}
@@ -216,8 +216,8 @@ export function ReportsPage({
                 >
                   {ACTIVITY_FILTER_LABEL[filter]}
                   <svg
-                    width="10"
-                    height="10"
+                    width="14"
+                    height="14"
                     fill="none"
                     viewBox="0 0 10 10"
                   >
@@ -236,7 +236,7 @@ export function ReportsPage({
                       className="fixed inset-0 z-10"
                       onClick={() => setFilterOpen(false)}
                     />
-                    <div className="absolute right-0 top-[calc(100%+6px)] z-20 bg-white rounded-[10px] border border-[rgba(0,0,0,0.1)] shadow-lg overflow-hidden min-w-[130px]">
+                    <div className="absolute right-0 top-[calc(100%+6px)] z-20 bg-white rounded-[10px] border border-[rgba(0,0,0,0.1)] shadow-lg overflow-hidden min-w-[180px]">
                       {ACTIVITY_FILTER_OPTIONS.map((f) => (
                         <button
                           key={f}
@@ -244,7 +244,7 @@ export function ReportsPage({
                             setFilter(f);
                             setFilterOpen(false);
                           }}
-                          className="w-full text-left px-3 py-2 text-[12px] font-medium whitespace-nowrap active:bg-[rgba(52,105,178,0.05)]"
+                          className="w-full text-left px-4 py-3 text-[20px] font-medium whitespace-nowrap active:bg-[rgba(52,105,178,0.05)]"
                           style={{
                             color:
                               filter === f
