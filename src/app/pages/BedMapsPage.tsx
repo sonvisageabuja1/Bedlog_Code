@@ -6,10 +6,27 @@ import { bedDisplayNumber } from "../lib/beds";
 import { awaitingBedPatients } from "../lib/patients";
 import { timeAgo } from "../lib/time";
 import { KbContext } from "../lib/kbContext";
-import { Toast } from "../components/Toast";
+import { ADMITTED_TITLE, Toast } from "../components/Toast";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { BedMapsStatusIcon } from "../components/icons/BedMapsStatusIcon";
 
 // ─── BED MAPS PAGE — from 02BedMaps-1 Figma design ──────────────────────────
+
+type DischargeAction = {
+  type: DischargeType;
+  label: string;
+  // Outcome wording for the confirm prompt ("will be marked as …").
+  status: string;
+  color: string;
+  toast: string;
+};
+
+const DISCHARGE_ACTIONS: DischargeAction[] = [
+  { type: "discharged", label: "Discharge", status: "Discharged", color: "#2437b5", toast: "discharged" },
+  { type: "deceased", label: "Deceased", status: "Deceased", color: "#dd2237", toast: "— Deceased" },
+  { type: "lama", label: "LAMA", status: "LAMA", color: "#ff662f", toast: "— LAMA" },
+  { type: "absconded", label: "Absconded", status: "Absconded", color: "#808790", toast: "— Absconded" },
+];
 
 // Status pill colours for the reserved / maintenance / cleaning modal.
 const OTHER_STATUS_PILL: Partial<
@@ -62,11 +79,15 @@ export function BedMapsPage({
     null,
   );
   const [transferMode, setTransferMode] = useState(false);
+  const [pendingAction, setPendingAction] =
+    useState<DischargeAction | null>(null);
   const [transferTarget, setTransferTarget] = useState("");
   const [admitHn, setAdmitHn] = useState("");
   const [toast, setToast] = useState<{
+    id: number;
     msg: string;
     type: "success" | "error";
+    title?: string;
   } | null>(null);
   const [wardDropOpen, setWardDropOpen] = useState(false);
   const [statusDropOpen, setStatusDropOpen] = useState(false);
@@ -77,9 +98,9 @@ export function BedMapsPage({
   const showToast = (
     msg: string,
     type: "success" | "error",
+    title?: string,
   ) => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    setToast({ id: Date.now(), msg, type, title });
   };
 
   const ql = search.toLowerCase();
@@ -123,6 +144,7 @@ export function BedMapsPage({
     setTransferMode(false);
     setTransferTarget("");
     setAdmitHn("");
+    setPendingAction(null);
   };
 
   return (
@@ -133,11 +155,14 @@ export function BedMapsPage({
         setStatusDropOpen(false);
       }}
     >
-      {/* Toast */}
       {toast && (
-        <div className="absolute top-2 left-3 right-3 z-30 pointer-events-none">
-          <Toast msg={toast.msg} type={toast.type} />
-        </div>
+        <Toast
+          key={toast.id}
+          msg={toast.msg}
+          type={toast.type}
+          title={toast.title}
+          onClose={() => setToast(null)}
+        />
       )}
 
       {/* Header row — "Beds" title + legend (matches Frame20) */}
@@ -540,6 +565,7 @@ export function BedMapsPage({
                     showToast(
                       `HN ${admitHn} admitted to ${bedDisplayNumber(beds, selectedBed.id)}`,
                       "success",
+                      ADMITTED_TITLE,
                     );
                     closeModal();
                   }}
@@ -572,6 +598,7 @@ export function BedMapsPage({
                           showToast(
                             `HN ${p.hospitalNumber} assigned to ${bedDisplayNumber(beds, selectedBed.id)} — admission complete`,
                             "success",
+                            ADMITTED_TITLE,
                           );
                           closeModal();
                         }}
@@ -703,24 +730,10 @@ export function BedMapsPage({
                 Change Status
               </p>
               <div className="flex gap-[8px]">
-                {(
-                  [
-                    { type: "discharged", label: "Discharge", color: "#2437b5", toast: "discharged" },
-                    { type: "deceased", label: "Deceased", color: "#dd2237", toast: "— Deceased" },
-                    { type: "lama", label: "LAMA", color: "#ff662f", toast: "— LAMA" },
-                    { type: "absconded", label: "Absconded", color: "#808790", toast: "— Absconded" },
-                  ] as { type: DischargeType; label: string; color: string; toast: string }[]
-                ).map((a) => (
+                {DISCHARGE_ACTIONS.map((a) => (
                   <button
                     key={a.type}
-                    onPointerDown={() => {
-                      onDischarge(modalPatient.id, selectedBed.id, a.type);
-                      showToast(
-                        `HN ${modalPatient.hospitalNumber} ${a.toast}`,
-                        "success",
-                      );
-                      closeModal();
-                    }}
+                    onPointerDown={() => setPendingAction(a)}
                     className="flex-1 h-[70px] rounded-[8px] flex items-center justify-center active:opacity-80"
                     style={{ backgroundColor: a.color }}
                   >
@@ -910,6 +923,25 @@ export function BedMapsPage({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Rendered outside the bed modal so taps here don't hit its
+          backdrop's onPointerDown={closeModal}. */}
+      {pendingAction && selectedBed && modalPatient && (
+        <ConfirmModal
+          message={`HN ${modalPatient.hospitalNumber} in ${bedDisplayNumber(beds, selectedBed.id)} will be marked as ${pendingAction.status}.`}
+          confirmLabel={pendingAction.label}
+          confirmColor={pendingAction.color}
+          onConfirm={() => {
+            onDischarge(modalPatient.id, selectedBed.id, pendingAction.type);
+            showToast(
+              `HN ${modalPatient.hospitalNumber} ${pendingAction.toast}`,
+              "success",
+            );
+            closeModal();
+          }}
+          onCancel={() => setPendingAction(null)}
+        />
       )}
     </div>
   );

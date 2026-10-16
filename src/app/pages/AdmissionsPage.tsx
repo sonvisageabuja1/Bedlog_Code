@@ -4,7 +4,7 @@ import { bedDisplayNumber } from "../lib/beds";
 import { awaitingBedPatients, isAwaitingBed } from "../lib/patients";
 import { KbContext } from "../lib/kbContext";
 import { stayHours, countdown, timeAgo } from "../lib/time";
-import { Toast } from "../components/Toast";
+import { ADMITTED_TITLE, Toast } from "../components/Toast";
 
 // ─── ADMISSIONS PAGE ──────────────────────────────────────────────────────────
 
@@ -36,8 +36,10 @@ export function AdmissionsPage({
   // Patient whose bed is being picked in the "Assign bed" modal.
   const [assignFor, setAssignFor] = useState<Patient | null>(null);
   const [toast, setToast] = useState<{
+    id: number;
     msg: string;
     type: "success" | "error";
+    title?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -45,9 +47,12 @@ export function AdmissionsPage({
     return () => clearInterval(t);
   }, []);
 
-  const showToast = (msg: string, type: "success" | "error") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+  const showToast = (
+    msg: string,
+    type: "success" | "error",
+    title?: string,
+  ) => {
+    setToast({ id: Date.now(), msg, type, title });
   };
 
   const ql = q.toLowerCase();
@@ -115,9 +120,13 @@ export function AdmissionsPage({
       </div>
 
       {toast && (
-        <div className="pt-3">
-          <Toast msg={toast.msg} type={toast.type} />
-        </div>
+        <Toast
+          key={toast.id}
+          msg={toast.msg}
+          type={toast.type}
+          title={toast.title}
+          onClose={() => setToast(null)}
+        />
       )}
 
       <div className="flex-1 overflow-y-auto p-3">
@@ -356,6 +365,7 @@ export function AdmissionsPage({
                         showToast(
                           `HN ${assignFor.hospitalNumber} assigned to ${bedDisplayNumber(beds, b.id)} — admission complete`,
                           "success",
+                          ADMITTED_TITLE,
                         );
                         setAssignFor(null);
                       }}
