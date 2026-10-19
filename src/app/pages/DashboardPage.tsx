@@ -10,10 +10,21 @@ import { bedDisplayNumber } from "../lib/beds";
 import { isAwaitingBed } from "../lib/patients";
 import { timeAgo } from "../lib/time";
 import { CircularStat } from "../components/CircularStat";
-import { Toast } from "../components/Toast";
+import { ADMITTED_TITLE, Toast } from "../components/Toast";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { KeyboardPad } from "../components/VirtualKeyboard";
 
 // ─── DASHBOARD PAGE ───────────────────────────────────────────────────────────
+
+// Label + button colour for the confirm step before a discharge-type update.
+const ACTION_CONFIRM: Record<DischargeType, { label: string; color: string }> =
+  {
+    discharged: { label: "Discharged", color: "#2138bc" },
+    deceased: { label: "Deceased", color: "#dd2237" },
+    lama: { label: "LAMA", color: "#ff662f" },
+    absconded: { label: "Absconded", color: "#808790" },
+    transferred: { label: "Transferred", color: "#2138bc" },
+  };
 
 export function DashboardPage({
   beds,
@@ -46,8 +57,10 @@ export function DashboardPage({
   const [hospitalNumber, setHospitalNumber] = useState("");
   const [selectedBedId, setSelectedBedId] = useState("");
   const [toast, setToast] = useState<{
+    id: number;
     msg: string;
     type: "success" | "error";
+    title?: string;
   } | null>(null);
   // Hospital number entry — the only keyboard-needing field on this page —
   // opens in its own self-contained modal (large input + its own KeyboardPad)
@@ -60,6 +73,8 @@ export function DashboardPage({
   // so the page underneath never has to resize at all. Confirmed 2026-09-10,
   // live on real kiosk hardware.
   const [hnModalOpen, setHnModalOpen] = useState(false);
+  const [pendingAction, setPendingAction] =
+    useState<DischargeType | null>(null);
   const hnModalInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -69,9 +84,9 @@ export function DashboardPage({
   const showToast = (
     msg: string,
     type: "success" | "error",
+    title?: string,
   ) => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    setToast({ id: Date.now(), msg, type, title });
   };
 
   const hnTrimmed = hospitalNumber.trim();
@@ -134,6 +149,7 @@ export function DashboardPage({
         ? `Patient ${hnTrimmed} assigned to ${bedDisplayNumber(beds, selectedBed!.id)} — admission complete`
         : `Patient ${hnTrimmed} admitted to ${bedDisplayNumber(beds, selectedBed!.id)}`,
       "success",
+      ADMITTED_TITLE,
     );
     setHospitalNumber("");
     setSelectedBedId("");
@@ -147,6 +163,11 @@ export function DashboardPage({
       );
       return;
     }
+    setPendingAction(type);
+  };
+
+  const confirmAction = (type: DischargeType) => {
+    setPendingAction(null);
     onDischarge(
       existingPatient!.id,
       // canDischarge guarantees an in-bed patient, never an awaiting one.
@@ -177,8 +198,15 @@ export function DashboardPage({
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-[clamp(8px,1.6vh,16px)] px-5 pt-[clamp(6px,1.2vh,10px)] pb-[clamp(6px,1.2vh,14px)] overflow-y-auto">
-      {/* Toast */}
-      {toast && <Toast msg={toast.msg} type={toast.type} />}
+      {toast && (
+        <Toast
+          key={toast.id}
+          msg={toast.msg}
+          type={toast.type}
+          title={toast.title}
+          onClose={() => setToast(null)}
+        />
+      )}
 
       {/* Quick Admission Card — grows to absorb the leftover space between the title and the Admitting Capacity row, compresses on short screens */}
       <div
@@ -531,6 +559,16 @@ export function DashboardPage({
             />
           </div>
         </div>
+      )}
+
+      {pendingAction && canDischarge && (
+        <ConfirmModal
+          message={`HN ${existingPatient!.hospitalNumber} will be marked as ${ACTION_CONFIRM[pendingAction].label}.`}
+          confirmLabel={ACTION_CONFIRM[pendingAction].label}
+          confirmColor={ACTION_CONFIRM[pendingAction].color}
+          onConfirm={() => confirmAction(pendingAction)}
+          onCancel={() => setPendingAction(null)}
+        />
       )}
     </div>
   );
