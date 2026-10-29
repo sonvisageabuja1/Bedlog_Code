@@ -11,10 +11,37 @@
 // Run with: node server.cjs
 
 const http = require("http");
+const fs = require("fs");
+const os = require("os");
 const { Pool } = require("pg");
 
 const PORT = process.env.PORT || 4002;
 const pool = new Pool(); // reads PG* env vars automatically
+
+// Identity of the physical machine this service runs on, stamped on every
+// backup. A restore only ever hands back a backup made on this same
+// machine, so an SD card imaged from an onboarded Pi (Postgres data and
+// all) can't bring that Pi's ward up on a new one. The Pi's board serial
+// is burned in; machine-id and hostname are fallbacks for other hardware.
+// BEDLOG_MACHINE_ID overrides it (tests, or hardware with no stable id).
+function readMachineId() {
+  if (process.env.BEDLOG_MACHINE_ID) return process.env.BEDLOG_MACHINE_ID;
+  const sources = [
+    () => fs.readFileSync("/proc/device-tree/serial-number", "utf8"),
+    () => /^Serial\s*:\s*(\S+)/m.exec(fs.readFileSync("/proc/cpuinfo", "utf8"))?.[1],
+    () => fs.readFileSync("/etc/machine-id", "utf8"),
+  ];
+  for (const read of sources) {
+    try {
+      const id = read()?.replace(/\0/g, "").trim();
+      if (id && !/^0+$/.test(id)) return id;
+    } catch {
+      // not available on this machine; try the next source
+    }
+  }
+  return `host:${os.hostname()}`;
+}
+const MACHINE_ID = readMachineId();
 
 // An idle client can drop its connection (Postgres restarted, network
 // blip). Without a listener node-postgres re-throws that as an uncaught
@@ -26,7 +53,7 @@ pool.on("error", (e) => {
 
 function withCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
@@ -80,7 +107,7 @@ async function logFailure(deviceId, message) {
 //    with what is stored, and an older snapshot is skipped, so the order
 //    the requests happen to arrive in cannot leave old state as the backup.
 // Returns "stored" or "stale".
-async function backupSnapshot({ config, beds, patients, snapshotAt }) {
+async function backupSnapshot({ config, beds, patients, snapshotAt, installId }) {
   const takenAt = Number.isFinite(Number(snapshotAt)) && snapshotAt != null
     ? new Date(Number(snapshotAt))
     : new Date();
@@ -99,8 +126,8 @@ async function backupSnapshot({ config, beds, patients, snapshotAt }) {
     }
 
     await client.query(
-      `INSERT INTO device_config (device_id, hospital_name, hospital_id, device_label, sync_endpoint, sync_enabled, snapshot_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+      `INSERT INTO device_config (device_id, hospital_name, hospital_id, device_label, sync_endpoint, sync_enabled, snapshot_at, install_id, machine_id, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
        ON CONFLICT (device_id) DO UPDATE SET
          hospital_name = EXCLUDED.hospital_name,
          hospital_id   = EXCLUDED.hospital_id,
@@ -108,6 +135,8 @@ async function backupSnapshot({ config, beds, patients, snapshotAt }) {
          sync_endpoint = EXCLUDED.sync_endpoint,
          sync_enabled  = EXCLUDED.sync_enabled,
          snapshot_at   = EXCLUDED.snapshot_at,
+         install_id    = COALESCE(EXCLUDED.install_id, device_config.install_id),
+         machine_id    = EXCLUDED.machine_id,
          updated_at    = now()`,
       [
         config.deviceId,
@@ -117,6 +146,8 @@ async function backupSnapshot({ config, beds, patients, snapshotAt }) {
         config.syncEndpoint ?? null,
         !!config.syncEnabled,
         takenAt.toISOString(),
+        installId ?? null,
+        MACHINE_ID,
       ],
     );
 
@@ -187,9 +218,23 @@ async function backupSnapshot({ config, beds, patients, snapshotAt }) {
   }
 }
 
+// The device id of the newest onboarded backup made on this machine, if
+// any. The kiosk asks for this at boot when its own storage has no setup
+// (a wiped or corrupted Chromium profile), since the device id it would
+// look itself up by was lost along with everything else.
+async function latestDeviceId() {
+  const r = await pool.query(
+    `SELECT device_id FROM device_config
+     WHERE machine_id = $1 AND hospital_id IS NOT NULL
+     ORDER BY snapshot_at DESC, updated_at DESC
+     LIMIT 1`,
+    [MACHINE_ID],
+  );
+  return r.rows[0]?.device_id ?? null;
+}
+
 // Reconstructs a full snapshot in the same shape the app itself uses
-// locally — for future recovery tooling (e.g. a "restore from backup"
-// path if a device's local profile is ever wiped again).
+// locally, plus the install id, which lives outside bl_config.
 async function readSnapshot(deviceId) {
   const cfg = await pool.query("SELECT * FROM device_config WHERE device_id = $1", [deviceId]);
   if (cfg.rows.length === 0) return null;
@@ -199,6 +244,7 @@ async function readSnapshot(deviceId) {
 
   const c = cfg.rows[0];
   return {
+    installId: c.install_id ?? undefined,
     config: {
       deviceId: c.device_id,
       hospitalName: c.hospital_name,
@@ -269,6 +315,41 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Boot-time restore: the newest backup made on this machine.
+  if (req.method === "GET" && req.url === "/api/backup/latest") {
+    try {
+      const deviceId = await latestDeviceId();
+      const snapshot = deviceId && (await readSnapshot(deviceId));
+      if (!snapshot) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "no backup found for this machine" }));
+        return;
+      }
+      console.log(`restore: served backup for device ${deviceId}`);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(snapshot));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // Detach: forget every backup made on this machine, so the ward the
+  // device was just released from can't be restored onto it at next boot.
+  if (req.method === "DELETE" && req.url === "/api/backup") {
+    try {
+      const r = await pool.query("DELETE FROM device_config WHERE machine_id = $1", [MACHINE_ID]);
+      console.log(`detach: cleared ${r.rowCount} backup(s) for this machine`);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, cleared: r.rowCount }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: e.message }));
+    }
+    return;
+  }
+
   if (req.method === "GET" && req.url.startsWith("/api/backup/")) {
     const deviceId = decodeURIComponent(req.url.slice("/api/backup/".length));
     try {
@@ -292,5 +373,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`bedlog db-backend listening on port ${PORT}`);
+  console.log(`bedlog db-backend listening on port ${PORT} (machine ${MACHINE_ID})`);
 });

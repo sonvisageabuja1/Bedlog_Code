@@ -16,7 +16,11 @@ import type {
 } from "./types";
 import { DISCHARGE_TTL } from "./constants";
 import { ls } from "./lib/storage";
-import { backupState } from "./lib/dbBackup";
+import {
+  backupState,
+  clearBackup,
+  fetchLatestBackup,
+} from "./lib/dbBackup";
 import { uid } from "./lib/id";
 import { isAwaitingBed } from "./lib/patients";
 import { KbContext } from "./lib/kbContext";
@@ -152,6 +156,41 @@ export default function App() {
   // matters: it's what keeps an interrupted/corrupted onboarding from ever
   // being mistaken for a completed one.
   const needsSetup = !isConfigValid(config);
+
+  // Boot-time restore. A device that boots with no usable setup has most
+  // likely lost its Chromium profile (a power cut inside Chromium's
+  // write-back window, or a corrupted Local Storage database), not been
+  // freshly unboxed — so before showing setup, ask the Pi's Postgres
+  // backup for this machine's last snapshot. The splash holds until the
+  // answer is in. Only a device that boots without a setup looks at all.
+  const [splashDone, setSplashDone] = useState(false);
+  const [restoreChecked, setRestoreChecked] = useState(() =>
+    isConfigValid(config),
+  );
+  useEffect(() => {
+    if (restoreChecked) return;
+    fetchLatestBackup().then((snap) => {
+      if (snap) {
+        setDeviceId(snap.config.deviceId);
+        if (snap.installId) ls.set("bl_install_id", snap.installId);
+        const restoredBeds = syncBeds(snap.beds, snap.config.wards);
+        ls.set("bl_config", snap.config);
+        ls.set("bl_beds", restoredBeds);
+        ls.set("bl_patients", snap.patients);
+        setConfig(snap.config);
+        setBeds(restoredBeds);
+        setPatients(snap.patients);
+      }
+      setRestoreChecked(true);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const handleSplashDone = useCallback(() => setSplashDone(true), []);
+  useEffect(() => {
+    if (appState === "splash" && splashDone && restoreChecked) {
+      setAppState(needsSetup ? "needsSetup" : "ready");
+    }
+  }, [appState, splashDone, restoreChecked, needsSetup]);
 
   // Persist
   useEffect(() => {
@@ -568,6 +607,8 @@ export default function App() {
         throw new Error("This device isn't linked to a Mediboard ward");
       }
       await detachMediboardDevice(config.hospitalId, ward.id, pin);
+      // Otherwise the next boot would restore the ward just released.
+      await clearBackup();
       for (const key of [
         "bl_beds",
         "bl_patients",
@@ -660,11 +701,8 @@ export default function App() {
           {/* Splash screen */}
           {appState === "splash" && (
             <SplashScreen
-              onDone={() =>
-                setAppState(
-                  needsSetup ? "needsSetup" : "ready",
-                )
-              }
+              onDone={handleSplashDone}
+              hold={!restoreChecked}
             />
           )}
 

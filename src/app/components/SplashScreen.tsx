@@ -7,20 +7,34 @@ import {
 // ─── SPLASH SCREEN ───────────────────────────────────────────────────────────
 // "Powered by Sonvisage" boot screen: logo fades in, a thin brand-blue bar
 // fills across the bottom, then the whole thing fades out into the app.
+// While `hold` is true (boot is still looking for a backup to restore) it
+// stays on the loading phase instead of fading out to a blank screen.
 
-export function SplashScreen({ onDone }: { onDone: () => void }) {
+export function SplashScreen({
+  onDone,
+  hold = false,
+}: {
+  onDone: () => void;
+  hold?: boolean;
+}) {
   const [phase, setPhase] = useState<"in" | "loading" | "fade">("in");
+  const [minElapsed, setMinElapsed] = useState(false);
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase("loading"), 100);
-    const t2 = setTimeout(() => setPhase("fade"), 2200);
-    const t3 = setTimeout(onDone, 2700);
+    const t2 = setTimeout(() => setMinElapsed(true), 2200);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
-      clearTimeout(t3);
     };
-  }, [onDone]);
+  }, []);
+
+  useEffect(() => {
+    if (!minElapsed || hold) return;
+    setPhase("fade");
+    const t = setTimeout(onDone, 500);
+    return () => clearTimeout(t);
+  }, [minElapsed, hold, onDone]);
 
   return (
     <div

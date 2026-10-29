@@ -19,6 +19,12 @@ CREATE TABLE IF NOT EXISTS device_config (
   -- snapshot older than this is ignored, so two overlapping posts can never
   -- leave the OLDER state as the backup.
   snapshot_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- The kiosk's bl_install_id, which Mediboard binds the ward to. Kept so a
+  -- restore after a wiped profile is still recognised as the same device.
+  install_id    TEXT,
+  -- The physical machine the backup was made on (see server.cjs). A boot
+  -- restore only returns backups from the machine it runs on.
+  machine_id    TEXT,
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -110,3 +116,7 @@ ALTER TABLE wards ALTER COLUMN capacity SET DEFAULT 0;
 ALTER TABLE wards ALTER COLUMN floor SET DEFAULT '';
 -- 2026-09-16: stale-snapshot guard.
 ALTER TABLE device_config ADD COLUMN IF NOT EXISTS snapshot_at TIMESTAMPTZ NOT NULL DEFAULT now();
+-- 2026-10-29: boot-time restore after a wiped Chromium profile.
+ALTER TABLE device_config ADD COLUMN IF NOT EXISTS install_id TEXT;
+ALTER TABLE device_config ADD COLUMN IF NOT EXISTS machine_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_device_config_machine ON device_config(machine_id, snapshot_at DESC);
