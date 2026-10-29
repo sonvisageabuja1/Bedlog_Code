@@ -12,6 +12,7 @@ import {
 } from "../lib/pin";
 import { WardModal } from "../components/WardModal";
 import { NumericKeypad } from "../components/NumericKeypad";
+import { fetchDeviceAddresses, type DeviceAddress } from "../lib/deviceInfo";
 
 export function SettingsPage({
   config,
@@ -58,6 +59,12 @@ export function SettingsPage({
   // Ward details are view-only — managed exclusively from Mediboard now.
   const [wardModal, setWardModal] = useState<Ward | null>(null);
   const { openFor } = useContext(KbContext);
+
+  // Footer: this device's IP, so support knows which Pi they're looking at.
+  const [addresses, setAddresses] = useState<DeviceAddress[] | null>(null);
+  useEffect(() => {
+    fetchDeviceAddresses().then(setAddresses);
+  }, []);
 
   // Change PIN
   const [newPin, setNewPin] = useState("");
@@ -709,6 +716,18 @@ export function SettingsPage({
             )}
           </div>
         </div>
+
+        {/* Device IP — small print at the very bottom, like an app version. */}
+        {addresses && (
+          <p
+            className="text-center text-[10px] text-[#94a3b8] pt-[4px] pb-[2px]"
+            style={{ fontFamily: "Inter, sans-serif" }}
+          >
+            {addresses.length > 0
+              ? `IP ${addresses.map((a) => a.address).join(" · ")}`
+              : "No network connection"}
+          </p>
+        )}
       </div>
 
       {/* Detach — ward PIN, verified against Mediboard by the modal, then

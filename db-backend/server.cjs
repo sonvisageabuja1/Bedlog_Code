@@ -292,6 +292,21 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // This Pi's LAN addresses, for the Settings footer: the kiosk page can't
+  // read its own IP, so staff and support can see which device to SSH into.
+  if (req.method === "GET" && req.url === "/api/device-info") {
+    const addresses = Object.entries(os.networkInterfaces()).flatMap(
+      ([iface, addrs]) =>
+        (addrs || [])
+          // 169.254.x.x is self-assigned when DHCP fails: no usable network.
+          .filter((a) => a.family === "IPv4" && !a.internal && !a.address.startsWith("169.254."))
+          .map((a) => ({ iface, address: a.address })),
+    );
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ addresses }));
+    return;
+  }
+
   if (req.method === "POST" && req.url === "/api/backup") {
     let body = {};
     try {
