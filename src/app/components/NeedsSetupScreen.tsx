@@ -21,7 +21,7 @@ export function NeedsSetupScreen({
 
         <div className="flex flex-col gap-4">
           <p className="font-bold text-[36px] text-[#0f172a]">
-            This device isn't set up yet
+            This device isn't set up yet.
           </p>
           <p className="text-[26px] text-[#64748b] leading-relaxed">
             Connect it to Mediboard to pick the ward this device
