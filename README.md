@@ -1,5 +1,5 @@
 
-  # Hospital Bed Management System
+  # Hospital Bed Management System.
 
   This is a code bundle for Hospital Bed Management System. The original project is available at https://www.figma.com/design/MAVNhV74KGFHuq7wJXz8vV/Hospital-Bed-Management-System.
 
