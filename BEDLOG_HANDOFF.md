@@ -289,18 +289,32 @@ Everything below is unresolved and worth prioritizing when Mediboard-integration
 
 ## 7. Deployment — Raspberry Pi Kiosk
 
-Full, step-by-step deployment instructions (first-time setup, every-update flow, resetting a device, exiting/re-entering kiosk mode, and a troubleshooting section built entirely from real incidents hit on real hardware) live in a separate, dedicated artifact:
+The older Kiosk Deploy Runbook artifact (https://claude.ai/code/artifact/f6e65fe4-73d0-4556-a063-10f788831381) describes a console + `cage` + static `serve` setup. **That is not what the devices run.** As found over SSH on WARD4 and WARD5 on 2026-10-29 (Pi 4, Debian 13 trixie, all imaged from one SD card whose original hostname was `NHAFINAL`):
 
-**→ Kiosk Deploy Runbook**: https://claude.ai/code/artifact/f6e65fe4-73d0-4556-a063-10f788831381
+- The code is a git checkout at `/home/pi/Documents/bedlog`. Its `origin` is `https://github.com/sonvisageabuja1/Bedlog_Code.git`, branch `main`. Pushing here updates both that repo and `Mediboards/bedlog-ui`.
+- `bedlog-vite.service` serves the app with the Vite **dev server** (`npm run dev`, port 5173), as `pi`.
+- `bedlog-backend.service` runs `db-backend/server.cjs` on port 4002. Its `PG*` credentials are in the unit.
+- `bedlog-kiosk.service` runs Chromium `--kiosk` (profile `/home/pi/.config/bedlog-chromium`) on the labwc desktop under lightdm.
+- `bedlog-update.timer` runs `/usr/local/bin/bedlog-update.sh` as root every 5 minutes.
 
-Summary of the current architecture (fully detailed in that runbook):
+### 7.1 How a push reaches the devices
 
-- The Pi boots straight to a console (no desktop), auto-logged-in.
-- `bedlog-server.service` — a plain static file server (`serve`) hosting the built `dist/` on port 5173.
-- `bedlog-kiosk.service` — launches `cage` (a minimal single-app Wayland compositor) with Chromium as its sole client, in `--kiosk` mode, pointed at `http://localhost:5173`.
-- Both are systemd services with `Restart=always`.
+`/usr/local/bin/bedlog-update.sh` is `deploy/bootstrap.sh`. It's deliberately tiny and never needs changing on a device. It fetches, then runs `deploy/update.sh` **as it is on the newest `origin/main`**, so a change to the update logic ships with the push that contains it. `update.sh`:
 
-Deploying an updated build: `pnpm build` locally, then either copy `dist/` to `/home/pi/bedlog` via USB drive or `rsync`, then `sudo systemctl restart bedlog-server bedlog-kiosk` on the Pi. Full commands in the runbook.
+1. Does nothing when the device is already on `origin/main` and that commit's deploy completed. If the code is current but the deploy didn't finish, it re-runs the device steps (step 4).
+2. Skips a commit that already failed on this device, until a newer one arrives. A bad push therefore never loops.
+3. Checks out the new commit in a separate worktree (`/var/lib/bedlog-update/stage`) and runs `npm ci` and `npm run build` there. **The kiosk keeps running throughout.** If either fails, nothing on the device has changed.
+4. Only then stops the kiosk and switches: `git reset --hard` and swaps in the new `node_modules`, keeping the old one for rollback. It loads `db-backend/schema.sql` (`deploy/db-migrate.sh`), restarts the backup service and vite, then waits up to a minute for `/src/main.tsx` to compile and `:4002/health` to answer. On failure it rolls back to the old commit and `node_modules`. On success it runs `deploy/install.sh`, starts the kiosk and records the commit in `/var/lib/bedlog-update/deployed`.
+
+`deploy/install.sh` installs the files that live outside the repo: the bootstrap, and a `bedlog-kiosk.service` drop-in that runs `deploy/storage-repair.py` before Chromium starts (see §7.2).
+
+Progress and errors are in `journalctl -u bedlog-update`. To try a commit on one Pi before pushing it to everyone, push it to a remote on that Pi and run `sudo BEDLOG_REMOTE=<remote> /usr/local/bin/bedlog-update.sh`.
+
+**Migration from the old updater (2026-10-29).** The old `/usr/local/bin/bedlog-update.sh` was a standalone script: reset to `origin/main`, `npm install`, `npm run build`, restart, health check. On any failure it rolled back after already stopping the kiosk, so a commit it couldn't install restarted the kiosk every 5 minutes. Since 2026-10 every update failed: `package.json` listed the Mac-only `@rollup/rollup-darwin-arm64` and `lightningcss-darwin-arm64`, which `npm install` refuses on the Pi. The old script runs `npm install` as root, so the first push carrying `deploy/` migrates each device itself. The `postinstall` hook (`deploy/postinstall.sh`) loads the schema and runs `install.sh`, and it does nothing anywhere else. The old script is kept as `/usr/local/bin/bedlog-update.sh.pre-bootstrap`. A device whose checkout is broken (WARD5: empty git objects from a power cut) can't fetch, and needs a fresh clone by hand.
+
+### 7.2 Local Storage repair
+
+A power cut can leave a zero-filled hole in the Local Storage leveldb log. On open, leveldb skips the rest of that 32 KB block and keeps appending to the same log, so everything written after the hole is lost again at every boot. WARD5 lost three onboardings this way, and WARD4 had been losing every write since a hole at byte 36,938. `deploy/storage-repair.py` runs before each Chromium start. When the log has bytes leveldb would skip, it rewrites the log from every intact record (CRC-checked), in write order, as one clean batch. A copy of the damaged files goes to `/home/pi/.config/bedlog-chromium/bedlog-storage-backups/` (the last 5 are kept). It does nothing on a clean log or while Chromium holds the database. Its output is in `journalctl -u bedlog-kiosk`. It was verified with real Chromium: the damaged WARD5 log loads as "not set up" and drops new writes across a restart, while the repaired one loads the ENT ward with 20 beds and 4 patients and keeps new writes.
 
 ---
 
@@ -383,13 +397,13 @@ Field reports: 7 of 12 kiosks came back to "Set up this device" after a power cy
 
 - **When it runs:** only when the app boots with no usable setup (`isConfigValid` fails). The splash holds while `fetchLatestBackup` asks `GET /api/backup/latest`, retrying for up to 10 seconds because the kiosk can start before the service or Postgres. A 404, or no answer in time, falls through to the setup screen as before. A device whose storage is intact never asks.
 - **What it restores:** `bl_config`, `bl_beds`, `bl_patients`, `bl_device_id` (Mediboard's id) and `bl_install_id`. The install id is now sent with every backup (`device_config.install_id`) because Mediboard binds the ward to it. Without it, a restored device would look like a different device trying to take the ward over. The cached PIN hash is not restored, so offline PIN checks fall back to the default until the device verifies once online.
-- **Same machine only:** the service stamps every backup with `device_config.machine_id` (the Pi's board serial, falling back to `/etc/machine-id`, then hostname; `BEDLOG_MACHINE_ID` overrides it). `/latest` only returns backups made on the machine it runs on, so an SD card imaged from an onboarded Pi can't bring that Pi's ward up on another. Rows from before this change have no machine id and become restorable after the device's next backup (it posts on every boot with a valid setup).
+- **Same machine only:** the service stamps every backup with `device_config.machine_id` (the Pi's board serial, falling back to `/etc/machine-id`, then hostname; `BEDLOG_MACHINE_ID` overrides it). `/latest` only returns backups made on the machine it runs on, so an SD card imaged from an onboarded Pi can't bring that Pi's ward up on another. Rows from before this change have no machine id. The service claims them for its own machine at startup and logs which ones; a device whose storage is already damaged never posts a fresh backup, so without the claim it could never restore.
 - **Detach** calls `DELETE /api/backup` after Mediboard releases the ward, which deletes this machine's backups, so the released ward isn't restored at the next boot. It's best effort: if the service is down, the stale backup stays.
 - **The backup service logs** `restore: served backup for device …` to its journal when it hands one out.
 
 Verified in Docker (Postgres 16) with the real service and the built app in headless Chrome: the setup came back after a full profile wipe (beds including `cleaning`, an awaiting-bed patient, device id and install id). Also verified: a different machine id sees setup; the service down shows setup after about 11 seconds; the service starting 4 seconds after the kiosk still restores; an intact boot makes no restore request; after a detach clear, a wiped boot shows setup. The schema loads fresh, re-runs cleanly, and upgrades a 2026-09-16 database.
 
-Deploying: load the new `schema.sql` on each Pi's database (it upgrades in place), copy `db-backend/` over and restart `bedlog-db`, then ship the new frontend build. Adding `After=bedlog-db.service` to `bedlog-kiosk.service` shortens the boot wait but isn't required. The restore only helps on Pis where the backup service is actually running.
+Deploying: `deploy/update.sh` loads `schema.sql` on every update (see §7.1). The restore only helps on Pis where the backup service is actually running.
 
 ---
 

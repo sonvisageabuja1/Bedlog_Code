@@ -372,6 +372,33 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: "not found" }));
 });
 
+// Backups written before machine_id existed (pre 2026-10-29) carry none, so
+// the boot restore could never find them, and a device whose storage is
+// already damaged never posts a fresh one to get stamped. They were written
+// into this machine's own Postgres, so they are claimed for it once. (An SD
+// image cloned with such rows from another Pi would hand that Pi's rows to
+// this one; the log line below names what was claimed.) Postgres may still
+// be starting when the service does, hence the retries.
+async function claimLegacyBackups(attempt = 1) {
+  try {
+    const r = await pool.query(
+      "UPDATE device_config SET machine_id = $1 WHERE machine_id IS NULL RETURNING device_id, hospital_id",
+      [MACHINE_ID],
+    );
+    if (r.rowCount > 0) {
+      const list = r.rows.map((x) => `${x.device_id} (hospital ${x.hospital_id ?? "none"})`).join(", ");
+      console.log(`claimed ${r.rowCount} pre-machine-id backup(s) for this machine: ${list}`);
+    }
+  } catch (e) {
+    if (attempt < 10) {
+      setTimeout(() => claimLegacyBackups(attempt + 1), 3000);
+    } else {
+      console.error("claiming pre-machine-id backups failed:", e.message);
+    }
+  }
+}
+
 server.listen(PORT, () => {
   console.log(`bedlog db-backend listening on port ${PORT} (machine ${MACHINE_ID})`);
+  claimLegacyBackups();
 });

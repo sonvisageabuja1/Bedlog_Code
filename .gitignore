@@ -1,5 +1,7 @@
 # Dependencies
 node_modules/
+# Kept by deploy/update.sh during a device update, for rollback
+node_modules.prev/
 
 # Build output
 dist/
@@ -20,3 +22,6 @@ pnpm-debug.log*
 # Editor
 .vscode/
 .idea/
+
+# Python bytecode
+__pycache__/
