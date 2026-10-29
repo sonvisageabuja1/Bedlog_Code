@@ -30,7 +30,7 @@ export function SettingsPage({
   onBack: () => void;
   onSyncNow: (cfgOverride?: AppConfig) => void;
   syncStatus: "idle" | "sending" | "success" | "error";
-  lastSync: { at: number; error?: string } | null;
+  lastSync: { at: number; error?: string; replaced?: boolean } | null;
   // Releases this ward on Mediboard (PIN already verified by the caller's
   // modal, forwarded here because the endpoint checks it again) and wipes
   // local setup so the device returns to "Set up this device".
@@ -39,6 +39,8 @@ export function SettingsPage({
   const [detachPinOpen, setDetachPinOpen] = useState(false);
   const [detachBusy, setDetachBusy] = useState(false);
   const [detachError, setDetachError] = useState<string | null>(null);
+  // Another device took this ward over: detaching then only clears this one.
+  const replaced = !!lastSync?.replaced;
   const runDetach = async (pin: string) => {
     setDetachPinOpen(false);
     setDetachBusy(true);
@@ -411,9 +413,19 @@ export function SettingsPage({
                 className="text-[#8e8e93] text-[12px] mt-[2px]"
                 style={{ fontFamily: "Inter, sans-serif" }}
               >
-                This device is the only one linked to{" "}
-                {draft.wards[0].name}. Detach it to move the ward to
-                another device or to set this one up again.
+                {replaced ? (
+                  <>
+                    Another device has taken over {draft.wards[0].name},
+                    so this one can no longer sync. Clear it to set it up
+                    for its own ward.
+                  </>
+                ) : (
+                  <>
+                    This device is the only one linked to{" "}
+                    {draft.wards[0].name}. Detach it to move the ward to
+                    another device or to set this one up again.
+                  </>
+                )}
               </p>
             </div>
             <div className="bg-white rounded-[16px] border border-red-200 p-[16px] flex flex-col gap-[10px]">
@@ -421,10 +433,9 @@ export function SettingsPage({
                 className="text-[12px] text-[#64748b] leading-relaxed"
                 style={{ fontFamily: "Inter, sans-serif" }}
               >
-                Detaching stops this device from syncing and clears
-                its local setup. Beds, patients, and history stay on
-                Mediboard. Requires the ward PIN and an internet
-                connection.
+                {replaced
+                  ? "Clears this device's local setup so it can be set up again. Beds, patients, and history stay on Mediboard. Requires the ward PIN and an internet connection."
+                  : "Detaching stops this device from syncing and clears its local setup. Beds, patients, and history stay on Mediboard. Requires the ward PIN and an internet connection."}
               </p>
               {detachError && (
                 <p className="text-[11px] text-[#dd2237] font-medium">
@@ -442,8 +453,12 @@ export function SettingsPage({
                 style={{ fontFamily: "Inter, sans-serif" }}
               >
                 {detachBusy
-                  ? "Detaching…"
-                  : "Detach this device from ward"}
+                  ? replaced
+                    ? "Clearing…"
+                    : "Detaching…"
+                  : replaced
+                    ? "Clear this device and set up again"
+                    : "Detach this device from ward"}
               </button>
             </div>
           </div>

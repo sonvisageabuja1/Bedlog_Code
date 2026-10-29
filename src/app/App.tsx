@@ -39,6 +39,7 @@ import {
   buildMediboardSyncPayload,
   detachMediboardDevice,
   KNOWN_BED_STATUSES,
+  MediboardDeviceConflictError,
   syncMediboardWard,
 } from "./lib/mediboard";
 import { DashboardNavIcon } from "./components/icons/DashboardNavIcon";
@@ -132,11 +133,14 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState<
     "idle" | "sending" | "success" | "error"
   >("idle");
+  // `replaced`: Mediboard refused the sync because the ward is now attached
+  // to another device. Settings then offers to clear this one.
   const [lastSync, setLastSync] = useState<{
     at: number;
     error?: string;
+    replaced?: boolean;
   } | null>(() =>
-    ls.get<{ at: number; error?: string } | null>(
+    ls.get<{ at: number; error?: string; replaced?: boolean } | null>(
       "bl_last_sync",
       null,
     ),
@@ -467,6 +471,7 @@ export default function App() {
       const ward = cfg.wards[0];
       setSyncStatus("sending");
       let error: string | undefined;
+      let replaced = false;
       try {
         if (cfg.hospitalId && ward?.id) {
           const payload = buildMediboardSyncPayload(
@@ -527,8 +532,13 @@ export default function App() {
         }
       } catch (e) {
         error = e instanceof Error ? e.message : "Sync failed";
+        replaced = e instanceof MediboardDeviceConflictError;
       }
-      const record = { at: Date.now(), error };
+      const record = {
+        at: Date.now(),
+        error,
+        ...(replaced && { replaced: true }),
+      };
       ls.set("bl_last_sync", record);
       setLastSync(record);
       if (!error) {
@@ -606,7 +616,14 @@ export default function App() {
       if (!config.hospitalId || !ward) {
         throw new Error("This device isn't linked to a Mediboard ward");
       }
-      await detachMediboardDevice(config.hospitalId, ward.id, pin);
+      try {
+        await detachMediboardDevice(config.hospitalId, ward.id, pin);
+      } catch (e) {
+        // 409: another device has taken the ward over. Mediboard checks the
+        // PIN before that, so the PIN was right and there is nothing left to
+        // release; only this device's local setup still needs clearing.
+        if (!(e instanceof MediboardDeviceConflictError)) throw e;
+      }
       // Otherwise the next boot would restore the ward just released.
       await clearBackup();
       for (const key of [
@@ -614,9 +631,11 @@ export default function App() {
         "bl_patients",
         "bl_cached_pin_hash",
         "bl_pin_changed",
+        "bl_last_sync",
       ]) {
         ls.remove(key);
       }
+      setLastSync(null);
       const fresh: AppConfig = {
         hospitalName: "",
         wards: [],

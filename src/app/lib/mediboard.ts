@@ -402,8 +402,9 @@ export interface MediboardSetupDevice {
   };
 }
 
-// Thrown when the ward is attached to a different device and the caller
-// did not ask to replace it (HTTP 409 from /setup).
+// Thrown when the ward is attached to a different device (HTTP 409): from
+// /setup when the caller did not ask to replace it, and from /sync or
+// detach when this device has been replaced by another one.
 export class MediboardDeviceConflictError extends Error {
   readonly status = 409;
 }
@@ -648,6 +649,11 @@ async function syncMediboardWardOnce(
     const message =
       (body as Partial<MediboardErrorResponse>)?.message ??
       `${res.status} ${res.statusText}`;
+    if (res.status === 409) {
+      throw new MediboardDeviceConflictError(
+        `Mediboard request failed: ${message}`,
+      );
+    }
     throw new Error(`Mediboard request failed: ${message}`);
   }
   const envelope = body as {
@@ -793,6 +799,7 @@ async function detachMediboardDeviceOnce(
     const message =
       (body as Partial<MediboardErrorResponse>)?.message ??
       `${res.status} ${res.statusText}`;
+    if (res.status === 409) throw new MediboardDeviceConflictError(message);
     throw new Error(message);
   }
 }
