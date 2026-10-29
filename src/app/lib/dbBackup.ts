@@ -6,8 +6,7 @@
 // The one time it is read is at boot, when localStorage has no setup at all
 // (see fetchLatestBackup).
 import type { AppConfig, Bed, Patient } from "../types";
-import { ls } from "./storage";
-import { isConfigValid } from "./sync";
+import { getOrCreateInstallId, isConfigValid } from "./sync";
 
 const BACKUP_URL = "http://localhost:4002/api/backup";
 
@@ -25,13 +24,16 @@ export function backupState(
     // newer one (posts overlap: one admission changes beds and patients in
     // two separate updates). installId travels with it because Mediboard
     // binds the ward to it, and a restore without it would look like a
-    // different device trying to take the ward over.
+    // different device trying to take the ward over. Created here if this
+    // install has none yet, so the backup taken right after a restore from
+    // an older (install-id-less) snapshot already holds the id the next
+    // sync will bind, rather than waiting for the next bed/patient change.
     body: JSON.stringify({
       config,
       beds,
       patients,
       snapshotAt: Date.now(),
-      installId: ls.get<string | null>("bl_install_id", null),
+      installId: getOrCreateInstallId(),
     }),
   }).catch(() => {
     // Silent — best-effort local backup, never surfaced to kiosk staff.
